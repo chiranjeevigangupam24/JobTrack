@@ -1,0 +1,22 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+.venv/
+env/
+
+# Test artifacts
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Exports
+JobTrack/exports/*.csv
+!JobTrack/exports/.gitkeep
+
+# Temporary files
+*.tmp
+*.bak
