@@ -1,3 +1,4 @@
+
 # JobTrack Pro — Job Application Management System
 
 A complete full-stack job application and interview pipeline platform featuring:
@@ -34,3 +35,4 @@ python -m unittest discover -s JobTrack/tests -t JobTrack -v
 - Complete architectural reference & manual: [`JobTrack/README.md`](./JobTrack/README.md)
 - Complete Project Implementation & Structure Guide: [`PROJECT_STRUCTURE_AND_IMPLEMENTATION.md`](./PROJECT_STRUCTURE_AND_IMPLEMENTATION.md)
 - Downloadable PDF Reference: [`JobTrack_Complete_Implementation_and_Structure_Guide.pdf`](./JobTrack_Complete_Implementation_and_Structure_Guide.pdf)
+=======
