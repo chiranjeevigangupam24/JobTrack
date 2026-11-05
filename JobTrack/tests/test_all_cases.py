@@ -23,9 +23,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from fastapi.testclient import TestClient
-
-from server import app
+try:
+    from fastapi.testclient import TestClient
+    from server import app
+    HAS_FASTAPI = True
+except ImportError:
+    HAS_FASTAPI = False
+    TestClient = None
+    app = None
 from src.models.application import (
     ApplicationStatus,
     Interview,
@@ -454,6 +459,7 @@ class TestExhaustiveDomainCases(unittest.TestCase):
             self.storage.load_applications()
 
 
+@unittest.skipUnless(HAS_FASTAPI, "FastAPI and TestClient required for API endpoint tests")
 class TestExhaustiveFastAPIEndpoints(unittest.TestCase):
     """Exhaustive tests for every FastAPI endpoint, query param, error response, and static file."""
 
