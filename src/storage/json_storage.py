@@ -40,14 +40,50 @@ class JSONStorage:
         if data_dir is None:
             # Resolve relative to project root
             base_dir = Path(__file__).resolve().parent.parent.parent
-            self.data_dir = base_dir / "data"
+            initial_data_dir = base_dir / "data"
         else:
-            self.data_dir = Path(data_dir)
+            initial_data_dir = Path(data_dir)
 
+        self.data_dir = initial_data_dir
         self.applications_path = self.data_dir / applications_filename
         self.settings_path = self.data_dir / settings_filename
 
+        # Serverless / Read-Only Environment Fallback (e.g., Vercel, AWS Lambda)
+        # If the target directory cannot be written to, transparently migrate data to /tmp.
+        is_serverless = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+        if is_serverless or not self._is_writable(self.data_dir):
+            temp_data_dir = Path(tempfile.gettempdir()) / "jobtrack_data"
+            try:
+                temp_data_dir.mkdir(parents=True, exist_ok=True)
+                # Seed from bundled JSON files if temp files do not exist yet
+                for fname in (applications_filename, settings_filename):
+                    bundled_file = initial_data_dir / fname
+                    temp_file = temp_data_dir / fname
+                    if bundled_file.exists() and not temp_file.exists():
+                        try:
+                            shutil.copy2(bundled_file, temp_file)
+                        except Exception:
+                            pass
+                self.data_dir = temp_data_dir
+                self.applications_path = self.data_dir / applications_filename
+                self.settings_path = self.data_dir / settings_filename
+            except Exception:
+                pass
+
         self._ensure_directory(self.data_dir)
+
+    @staticmethod
+    def _is_writable(path: Path) -> bool:
+        """Verify whether the directory supports file writes."""
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            test_file = path / f".write_test_{os.getpid()}.tmp"
+            test_file.write_text("ok", encoding="utf-8")
+            if test_file.exists():
+                test_file.unlink()
+            return True
+        except Exception:
+            return False
 
     def _ensure_directory(self, path: Path) -> None:
         """Create directory if it does not exist."""

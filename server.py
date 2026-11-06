@@ -78,6 +78,17 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def add_no_cache_headers(request, call_next):
+    """Enforces no-cache headers on all API responses to prevent stale browser or edge caching."""
+    response = await call_next(request)
+    if request.url.path.startswith("/api"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 # ==============================================================================
 # 3. Pydantic Schemas (Input Data Transfer Objects with Human-Friendly Docs)
 # ==============================================================================
@@ -427,12 +438,18 @@ def update_application(app_id: str, req: ApplicationUpdateRequest):
 
 @app.delete("/api/applications/{app_id}", tags=["Applications"])
 def delete_application(app_id: str):
-    """Permanently delete a job application and its associated interview rounds."""
+    """Permanently delete a job application and its associated interview rounds.
+    
+    Idempotent: If the application was already removed by another request, returns
+    success to avoid showing spurious errors to the user.
+    """
     try:
+        app_service.reload()
         app_service.delete_application(app_id)
         return {"success": True, "message": f"Application '{app_id}' has been permanently deleted."}
-    except RecordNotFoundError as re:
-        raise HTTPException(status_code=404, detail=str(re))
+    except RecordNotFoundError:
+        # Idempotent: If it's already deleted or absent, treat as cleanly removed
+        return {"success": True, "message": f"Application '{app_id}' was already deleted."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete application: {e}")
 

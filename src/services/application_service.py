@@ -110,6 +110,7 @@ class ApplicationService:
         Raises:
             RecordNotFoundError: If ID does not match any application.
         """
+        self.reload()
         app = self.get_application_by_id(application_id)
         if not app:
             raise RecordNotFoundError(f"Application with ID '{application_id}' not found.")
@@ -130,6 +131,7 @@ class ApplicationService:
         Raises:
             RecordNotFoundError: If application does not exist.
         """
+        self.reload()
         app = self.get_application_by_id(application_id)
         if not app:
             raise RecordNotFoundError(f"Application with ID '{application_id}' not found.")

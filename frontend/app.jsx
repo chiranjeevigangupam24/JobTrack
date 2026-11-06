@@ -15,21 +15,23 @@ const { useState, useEffect, useCallback, useMemo } = React;
 const API_BASE = "";
 
 const api = {
-  getHealth: () => fetch(`${API_BASE}/api/health`).then(r => r.json()),
-  getDashboard: () => fetch(`${API_BASE}/api/dashboard`).then(r => r.json()),
+  getHealth: () => fetch(`${API_BASE}/api/health?_t=${Date.now()}`, { cache: "no-store" }).then(r => r.json()),
+  getDashboard: () => fetch(`${API_BASE}/api/dashboard?_t=${Date.now()}`, { cache: "no-store" }).then(r => r.json()),
   getApplications: (params = {}) => {
     const q = new URLSearchParams();
     if (params.search) q.append("search", params.search);
     if (params.status && params.status !== "All") q.append("status", params.status);
     if (params.job_type && params.job_type !== "All") q.append("job_type", params.job_type);
-    return fetch(`${API_BASE}/api/applications?${q.toString()}`).then(r => r.json());
+    q.append("_t", Date.now());
+    return fetch(`${API_BASE}/api/applications?${q.toString()}`, { cache: "no-store" }).then(r => r.json());
   },
-  getApplicationById: (id) => fetch(`${API_BASE}/api/applications/${id}`).then(r => r.json()),
+  getApplicationById: (id) => fetch(`${API_BASE}/api/applications/${id}?_t=${Date.now()}`, { cache: "no-store" }).then(r => r.json()),
   createApplication: async (data) => {
     const res = await fetch(`${API_BASE}/api/applications`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
+      cache: "no-store",
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -42,6 +44,7 @@ const api = {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
+      cache: "no-store",
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -50,19 +53,23 @@ const api = {
     return res.json();
   },
   deleteApplication: async (id) => {
-    const res = await fetch(`${API_BASE}/api/applications/${id}`, { method: "DELETE" });
+    const res = await fetch(`${API_BASE}/api/applications/${id}`, { 
+      method: "DELETE",
+      cache: "no-store",
+    });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || err.message || "Failed to delete application");
     }
     return res.json();
   },
-  getInterviews: () => fetch(`${API_BASE}/api/interviews`).then(r => r.json()),
+  getInterviews: () => fetch(`${API_BASE}/api/interviews?_t=${Date.now()}`, { cache: "no-store" }).then(r => r.json()),
   scheduleInterview: async (data) => {
     const res = await fetch(`${API_BASE}/api/interviews`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
+      cache: "no-store",
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -75,6 +82,7 @@ const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
+      cache: "no-store",
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -82,19 +90,21 @@ const api = {
     }
     return res.json();
   },
-  getReminders: (days = 14) => fetch(`${API_BASE}/api/reminders?window_days=${days}`).then(r => r.json()),
-  getSettings: () => fetch(`${API_BASE}/api/settings`).then(r => r.json()),
+  getReminders: (days = 14) => fetch(`${API_BASE}/api/reminders?window_days=${days}&days=${days}&_t=${Date.now()}`, { cache: "no-store" }).then(r => r.json()),
+  getSettings: () => fetch(`${API_BASE}/api/settings?_t=${Date.now()}`, { cache: "no-store" }).then(r => r.json()),
   saveSettings: async (settings) => {
     let res = await fetch(`${API_BASE}/api/settings`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(settings),
+      cache: "no-store",
     });
     if (!res.ok && res.status === 405) {
       res = await fetch(`${API_BASE}/api/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),
+        cache: "no-store",
       });
     }
     if (!res.ok) {
@@ -103,7 +113,7 @@ const api = {
     }
     return res.json();
   },
-  seedDemo: () => fetch(`${API_BASE}/api/seed`, { method: "POST" }).then(r => r.json()),
+  seedDemo: () => fetch(`${API_BASE}/api/seed`, { method: "POST", cache: "no-store" }).then(r => r.json()),
   exportCSV: (type, status = "") => {
     const q = status && status !== "All" ? `?status_filter=${encodeURIComponent(status)}` : "";
     window.open(`${API_BASE}/api/export/${type}${q}`, "_blank");
@@ -465,6 +475,7 @@ function App() {
   const [interviewModalOpen, setInterviewModalOpen] = useState(false);
   const [targetAppForInterview, setTargetAppForInterview] = useState(null);
   const [deleteConfirmApp, setDeleteConfirmApp] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
   const [exitModalOpen, setExitModalOpen] = useState(false);
@@ -2127,25 +2138,39 @@ function App() {
             </div>
             <div className="flex justify-center gap-2 pt-2">
               <button
+                disabled={isDeleting}
                 onClick={() => setDeleteConfirmApp(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-800 cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-800 cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
+                disabled={isDeleting}
                 onClick={async () => {
+                  if (isDeleting || !deleteConfirmApp) return;
+                  const targetApp = deleteConfirmApp;
+                  const targetId = targetApp.application_id;
+                  setIsDeleting(true);
+                  // Optimistic UI update: Remove row immediately from display
+                  setApplications(prev => prev.filter(a => a.application_id !== targetId));
+                  setDeleteConfirmApp(null);
                   try {
-                    await api.deleteApplication(deleteConfirmApp.application_id);
+                    await api.deleteApplication(targetId);
                     showToast("Application permanently deleted", "success");
-                    setDeleteConfirmApp(null);
                     loadData();
                   } catch (e) {
                     showToast(e.message || "Failed to delete", "error");
+                    // Re-sync with backend in case of failure
+                    loadData();
+                  } finally {
+                    setIsDeleting(false);
                   }
                 }}
-                className="px-5 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-md cursor-pointer"
+                className={`px-5 py-2 rounded-xl text-xs font-bold text-white shadow-md transition cursor-pointer ${
+                  isDeleting ? "bg-slate-700 opacity-60 cursor-not-allowed" : "bg-rose-600 hover:bg-rose-500"
+                }`}
               >
-                Delete
+                {isDeleting ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
