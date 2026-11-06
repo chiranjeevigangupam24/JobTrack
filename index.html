@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full w-full dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>JobTrack Pro — Executive Job Application & Interview Pipeline SaaS</title>
+  
+  <!-- Immediate Theme Initialization -->
+  <script>
+    (function() {
+      try {
+        const saved = localStorage.getItem('jobtrack_theme');
+        if (saved === 'light') {
+          document.documentElement.classList.remove('dark');
+        } else {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
+
+  <!-- Global Diagnostic Catcher -->
+  <script>
+    window.addEventListener('error', function(e) {
+      console.error('[JobTrack Diagnostic]', e);
+      var root = document.getElementById('root');
+      if (root && root.querySelector('.initial-loader')) {
+        var errText = e.message || (e.target && e.target.src ? 'Failed to load: ' + e.target.src : 'Initialization error');
+        root.innerHTML = 
+          '<div class="h-full w-full flex items-center justify-center bg-[#070A12] text-slate-100 p-6">' +
+            '<div class="max-w-md w-full bg-[#0E1322] border border-rose-500/30 rounded-3xl p-6 shadow-2xl text-center space-y-4">' +
+              '<div class="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 mx-auto flex items-center justify-center font-bold text-xl">⚠️</div>' +
+              '<h3 class="font-bold text-base text-white">Application Loading Notice</h3>' +
+              '<p class="text-xs text-slate-400 leading-relaxed">' + errText + '</p>' +
+              '<div class="pt-2">' +
+                '<button onclick="location.reload()" class="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md transition cursor-pointer">' +
+                  'Reload JobTrack' +
+                '</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+      }
+    }, true);
+  </script>
+
+  <!-- Branded Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232563eb'><path d='M20 6h-4V4c0-1.1-.9-2-2-2h-4c-1.1 0-2 .9-2 2v2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6 0h-4V4h4v2z'/></svg>" />
+
+  <!-- Google Fonts: Inter, Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              200: '#bfdbfe',
+              300: '#93c5fd',
+              400: '#60a5fa',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- React 18 & ReactDOM (Cloudflare CDN with unpkg fallback) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/react@18/umd/react.production.min.js'"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/react-dom@18/umd/react-dom.production.min.js'"></script>
+  
+  <!-- Babel Standalone (Cloudflare CDN with unpkg fallback) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.10/babel.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/@babel/standalone/babel.min.js'"></script>
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="/static/styles.css?v=6.0.0" />
+</head>
+<body class="h-full w-full m-0 p-0 overflow-hidden bg-[#070A12] text-slate-100 antialiased selection:bg-brand-500 selection:text-white">
+
+  <!-- React Application Mount Point (100% viewport flex container) -->
+  <div id="root" class="h-full w-full flex flex-col overflow-hidden">
+    <!-- Initial Loading Screen -->
+    <div class="initial-loader h-full w-full flex items-center justify-center bg-[#070A12] flex-col gap-4">
+      <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center shadow-xl shadow-brand-500/25 animate-pulse text-white">
+        <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+      </div>
+      <div class="text-center space-y-1">
+        <p class="font-extrabold text-white text-lg tracking-tight">JobTrack Pro</p>
+        <p class="text-xs text-slate-400">Loading your full-screen pipeline dashboard...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- React JSX Application Entrypoint -->
+  <script type="text/babel" src="/static/app.jsx?v=6.0.0"></script>
+</body>
+</html>

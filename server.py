@@ -175,6 +175,7 @@ class SettingsUpdateRequest(BaseModel):
 # ==============================================================================
 
 @app.get("/api/health", tags=["System"])
+@app.get("/health", include_in_schema=False)
 def health_check():
     """Health check endpoint confirming that the backend server is active and accessible."""
     return {
@@ -186,6 +187,7 @@ def health_check():
 
 
 @app.get("/api/meta", tags=["System"])
+@app.get("/meta", include_in_schema=False)
 def get_metadata():
     """Returns standard dropdown choices (statuses, job types, interview rounds) for frontend forms."""
     return {
@@ -203,6 +205,7 @@ def get_metadata():
 # ==============================================================================
 
 @app.get("/api/dashboard", tags=["Dashboard"])
+@app.get("/dashboard", include_in_schema=False)
 def get_dashboard():
     """Unified dashboard endpoint providing KPIs, stage distributions, urgent alerts, and recent applications."""
     app_service.reload()
@@ -298,6 +301,7 @@ def get_dashboard():
 # ==============================================================================
 
 @app.get("/api/applications", tags=["Applications"])
+@app.get("/applications", include_in_schema=False)
 def list_applications(
     search: Optional[str] = Query(None, description="Search keyword across company, role, location, ID"),
     status: Optional[str] = Query(None, description="Filter by status (e.g. Applied, Interview, Offer Received)"),
@@ -337,6 +341,7 @@ def list_applications(
 
 
 @app.post("/api/applications", status_code=status.HTTP_201_CREATED, tags=["Applications"])
+@app.post("/applications", include_in_schema=False)
 def create_application(req: ApplicationCreateRequest):
     """Create, validate, persist, and return a new job application."""
     try:
@@ -386,6 +391,7 @@ def create_application(req: ApplicationCreateRequest):
 
 
 @app.get("/api/applications/{app_id}", tags=["Applications"])
+@app.get("/applications/{app_id}", include_in_schema=False)
 def get_application_by_id(app_id: str):
     """Retrieve full details of a specific job application including interview history."""
     app_service.reload()
@@ -399,6 +405,7 @@ def get_application_by_id(app_id: str):
 
 
 @app.put("/api/applications/{app_id}", tags=["Applications"])
+@app.put("/applications/{app_id}", include_in_schema=False)
 def update_application(app_id: str, req: ApplicationUpdateRequest):
     """Update fields on an existing application while preserving all interview history."""
     try:
@@ -437,6 +444,7 @@ def update_application(app_id: str, req: ApplicationUpdateRequest):
 
 
 @app.delete("/api/applications/{app_id}", tags=["Applications"])
+@app.delete("/applications/{app_id}", include_in_schema=False)
 def delete_application(app_id: str):
     """Permanently delete a job application and its associated interview rounds.
     
@@ -459,6 +467,7 @@ def delete_application(app_id: str):
 # ==============================================================================
 
 @app.get("/api/interviews", tags=["Interviews"])
+@app.get("/interviews", include_in_schema=False)
 def list_all_interviews():
     """Retrieve all scheduled, completed, and cancelled interviews across applications."""
     app_service.reload()
@@ -475,6 +484,7 @@ def list_all_interviews():
 
 
 @app.post("/api/interviews", status_code=status.HTTP_201_CREATED, tags=["Interviews"])
+@app.post("/interviews", include_in_schema=False)
 def schedule_interview(req: InterviewCreateRequest):
     """Schedule a new interview round for an application. Auto-updates status to 'Interview'."""
     try:
@@ -497,6 +507,7 @@ def schedule_interview(req: InterviewCreateRequest):
 
 
 @app.put("/api/interviews/{app_id}/{interview_id}", tags=["Interviews"])
+@app.put("/interviews/{app_id}/{interview_id}", include_in_schema=False)
 def update_interview(app_id: str, interview_id: str, req: InterviewUpdateRequest):
     """Update details of an interview round (date, time, meet link, notes)."""
     try:
@@ -512,6 +523,7 @@ def update_interview(app_id: str, interview_id: str, req: InterviewUpdateRequest
 
 
 @app.post("/api/interviews/{app_id}/{interview_id}/outcome", tags=["Interviews"])
+@app.post("/interviews/{app_id}/{interview_id}/outcome", include_in_schema=False)
 def record_interview_outcome(app_id: str, interview_id: str, req: InterviewOutcomeRequest):
     """Record Passed, Failed, or Pending outcome with feedback notes; marks round as Completed."""
     try:
@@ -531,6 +543,7 @@ def record_interview_outcome(app_id: str, interview_id: str, req: InterviewOutco
 
 
 @app.post("/api/interviews/{app_id}/{interview_id}/cancel", tags=["Interviews"])
+@app.post("/interviews/{app_id}/{interview_id}/cancel", include_in_schema=False)
 def cancel_interview(app_id: str, interview_id: str, req: InterviewCancelRequest):
     """Mark an interview as Cancelled with optional reason."""
     try:
@@ -551,6 +564,7 @@ def cancel_interview(app_id: str, interview_id: str, req: InterviewCancelRequest
 # ==============================================================================
 
 @app.get("/api/reminders", tags=["Reminders"])
+@app.get("/reminders", include_in_schema=False)
 def get_reminders(days: Optional[int] = Query(None, ge=1, le=90, description="Lookahead window in days (1-90)")):
     """Returns today's interviews, upcoming interviews, upcoming deadlines, and overdue deadlines."""
     app_service.reload()
@@ -574,6 +588,7 @@ def get_reminders(days: Optional[int] = Query(None, ge=1, le=90, description="Lo
 
 
 @app.get("/api/analytics", tags=["Analytics"])
+@app.get("/analytics", include_in_schema=False)
 def get_analytics():
     """Returns funnel conversion rates, status counts, top companies, and role breakdowns."""
     app_service.reload()
@@ -586,6 +601,7 @@ def get_analytics():
 # ==============================================================================
 
 @app.get("/api/export/{export_type}", tags=["Exports"])
+@app.get("/export/{export_type}", include_in_schema=False)
 def export_csv(export_type: str, status_filter: Optional[str] = None):
     """Export dataset to CSV with formula injection defense disarming '=', '+', '-', '@' triggers."""
     app_service.reload()
@@ -625,13 +641,16 @@ def export_csv(export_type: str, status_filter: Optional[str] = None):
 # ==============================================================================
 
 @app.get("/api/settings", tags=["Settings"])
+@app.get("/settings", include_in_schema=False)
 def get_settings():
     """Retrieve current user settings (reminder window, default status, date format)."""
     return storage.load_settings()
 
 
 @app.post("/api/settings", tags=["Settings"])
+@app.post("/settings", include_in_schema=False)
 @app.put("/api/settings", tags=["Settings"])
+@app.put("/settings", include_in_schema=False)
 def update_settings(req: SettingsUpdateRequest):
     """Update user preferences and persist atomically."""
     settings = storage.load_settings()
@@ -656,7 +675,9 @@ def update_settings(req: SettingsUpdateRequest):
 # ==============================================================================
 
 @app.post("/api/seed-sample-data", tags=["Demo"])
+@app.post("/seed-sample-data", include_in_schema=False)
 @app.post("/api/seed", tags=["Demo"])
+@app.post("/seed", include_in_schema=False)
 def seed_sample_data():
     """Populates realistic sample data (Google, Microsoft, Amazon, Stripe) for smooth project demos."""
     sample_records = [
@@ -821,15 +842,50 @@ def seed_sample_data():
 # 12. Static Assets & Single Page Application (SPA) Serving
 # ==============================================================================
 
-FRONTEND_DIR = PROJECT_ROOT / "frontend"
-if FRONTEND_DIR.exists():
-    # Mount the frontend directory to serve CSS, JSX, and scripts
+# Search candidates for index.html and static assets (supports local execution and Vercel serverless)
+STATIC_CANDIDATES = [
+    PROJECT_ROOT / "public",
+    PROJECT_ROOT / "frontend",
+    PROJECT_ROOT,
+    PROJECT_ROOT.parent / "public",
+    PROJECT_ROOT.parent / "frontend",
+    PROJECT_ROOT.parent,
+]
+
+FRONTEND_DIR = None
+for c in STATIC_CANDIDATES:
+    if c.exists() and (c / "index.html").exists():
+        FRONTEND_DIR = c
+        break
+
+if FRONTEND_DIR:
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
-    @app.get("/", include_in_schema=False)
-    def serve_frontend_index():
-        """Serves the interactive single-page dashboard at http://localhost:8000/"""
-        return FileResponse(FRONTEND_DIR / "index.html")
+@app.get("/", include_in_schema=False)
+@app.get("/index.html", include_in_schema=False)
+def serve_frontend_index():
+    """Serves the interactive single-page dashboard at http://localhost:8000/ or Vercel root."""
+    for c in STATIC_CANDIDATES:
+        idx = c / "index.html"
+        if idx.exists():
+            return FileResponse(idx)
+    return FileResponse(PROJECT_ROOT / "index.html")
+
+@app.get("/styles.css", include_in_schema=False)
+def serve_styles():
+    for c in STATIC_CANDIDATES:
+        f = c / "styles.css"
+        if f.exists():
+            return FileResponse(f, media_type="text/css")
+    raise HTTPException(status_code=404)
+
+@app.get("/app.jsx", include_in_schema=False)
+def serve_app_jsx():
+    for c in STATIC_CANDIDATES:
+        f = c / "app.jsx"
+        if f.exists():
+            return FileResponse(f, media_type="application/javascript")
+    raise HTTPException(status_code=404)
 
 
 # Standalone runner for `python server.py`
