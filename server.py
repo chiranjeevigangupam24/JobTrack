@@ -81,15 +81,7 @@ app.add_middleware(
 @app.middleware("http")
 async def add_no_cache_headers(request, call_next):
     """Enforces no-cache headers on all API responses to prevent stale browser or edge caching."""
-    # If path is /api/index.py, restore actual path from Vercel headers
-    matched_path = request.headers.get("x-matched-path") or request.headers.get("x-forwarded-uri") or request.headers.get("x-invoke-path")
-    if matched_path and matched_path != request.scope.get("path"):
-        request.scope["path"] = matched_path
-
     response = await call_next(request)
-    response.headers["X-Debug-Path"] = request.url.path
-    response.headers["X-Debug-Scope-Path"] = request.scope.get("path", "")
-    response.headers["X-Debug-Matched-Path"] = str(matched_path)
     if request.url.path.startswith("/api"):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
