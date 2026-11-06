@@ -82,6 +82,8 @@ app.add_middleware(
 async def add_no_cache_headers(request, call_next):
     """Enforces no-cache headers on all API responses to prevent stale browser or edge caching."""
     response = await call_next(request)
+    response.headers["X-Debug-Path"] = request.url.path
+    response.headers["X-Debug-Scope-Path"] = request.scope.get("path", "")
     if request.url.path.startswith("/api"):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
