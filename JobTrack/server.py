@@ -17,7 +17,7 @@ Architecture Overview:
 
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 # Ensure JobTrack root and 'src' package are importable regardless of launch folder
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -92,8 +92,8 @@ class ApplicationCreateRequest(BaseModel):
     application_date: Optional[str] = Field(None, description="ISO date (YYYY-MM-DD); defaults to today if omitted")
     application_deadline: Optional[str] = Field(None, description="Optional deadline ISO date (YYYY-MM-DD)")
     job_url: Optional[str] = Field(None, description="Optional URL to job posting (must start with http:// or https://)")
-    min_salary: Optional[float] = Field(None, description="Minimum expected salary (annual/base)")
-    max_salary: Optional[float] = Field(None, description="Maximum expected salary (annual/base)")
+    min_salary: Optional[Union[float, int, str]] = Field(None, description="Minimum expected salary (annual/base)")
+    max_salary: Optional[Union[float, int, str]] = Field(None, description="Maximum expected salary (annual/base)")
     status: Optional[str] = Field("Applied", description="Initial application status (defaults to 'Applied')")
     notes: Optional[str] = Field("", description="Personal notes, referrals, recruiter contact info")
     applicant_name: Optional[str] = Field("Naga Chiranjeevi", description="Name of the applicant / candidate")
@@ -109,8 +109,8 @@ class ApplicationUpdateRequest(BaseModel):
     application_date: Optional[str] = None
     application_deadline: Optional[str] = None
     job_url: Optional[str] = None
-    min_salary: Optional[float] = None
-    max_salary: Optional[float] = None
+    min_salary: Optional[Union[float, int, str]] = None
+    max_salary: Optional[Union[float, int, str]] = None
     status: Optional[str] = None
     notes: Optional[str] = None
     applicant_name: Optional[str] = None
@@ -329,17 +329,40 @@ def list_applications(
 def create_application(req: ApplicationCreateRequest):
     """Create, validate, persist, and return a new job application."""
     try:
+        # Normalize optional URL and deadline
+        clean_url = req.job_url.strip() if req.job_url else None
+        if clean_url and not clean_url.startswith("http://") and not clean_url.startswith("https://"):
+            clean_url = f"https://{clean_url}"
+        
+        clean_deadline = req.application_deadline.strip() if req.application_deadline else None
+        if clean_deadline == "":
+            clean_deadline = None
+
+        clean_min = None
+        if req.min_salary not in (None, "", "null"):
+            try:
+                clean_min = float(req.min_salary)
+            except (ValueError, TypeError):
+                clean_min = None
+
+        clean_max = None
+        if req.max_salary not in (None, "", "null"):
+            try:
+                clean_max = float(req.max_salary)
+            except (ValueError, TypeError):
+                clean_max = None
+
         app = app_service.add_application(
-            company_name=req.company_name,
-            job_role=req.job_role,
-            location=req.location or "Remote",
-            job_type=req.job_type or "Full-time",
+            company_name=req.company_name.strip(),
+            job_role=req.job_role.strip(),
+            location=req.location.strip() if req.location else "Remote",
+            job_type=req.job_type.strip() if req.job_type else "Full-time",
             job_description=req.job_description or "",
             application_date=req.application_date,
-            application_deadline=req.application_deadline,
-            job_url=req.job_url,
-            min_salary=req.min_salary,
-            max_salary=req.max_salary,
+            application_deadline=clean_deadline,
+            job_url=clean_url,
+            min_salary=clean_min,
+            max_salary=clean_max,
             status=req.status or "Applied",
             notes=req.notes or "",
             applicant_name=req.applicant_name or "Naga Chiranjeevi",
@@ -370,6 +393,28 @@ def update_application(app_id: str, req: ApplicationUpdateRequest):
     try:
         # Extract fields provided by the caller
         update_data = {k: v for k, v in req.model_dump().items() if v is not None}
+        if "job_url" in update_data and update_data["job_url"]:
+            clean_u = str(update_data["job_url"]).strip()
+            if clean_u and not clean_u.startswith("http://") and not clean_u.startswith("https://"):
+                clean_u = f"https://{clean_u}"
+            update_data["job_url"] = clean_u or None
+        if "application_deadline" in update_data and not update_data["application_deadline"]:
+            update_data["application_deadline"] = None
+
+        if "min_salary" in update_data:
+            val = update_data["min_salary"]
+            try:
+                update_data["min_salary"] = float(val) if val not in (None, "", "null") else None
+            except (ValueError, TypeError):
+                update_data["min_salary"] = None
+
+        if "max_salary" in update_data:
+            val = update_data["max_salary"]
+            try:
+                update_data["max_salary"] = float(val) if val not in (None, "", "null") else None
+            except (ValueError, TypeError):
+                update_data["max_salary"] = None
+
         updated_app = app_service.update_application(app_id, **update_data)
         return {"success": True, "data": updated_app.to_dict()}
     except RecordNotFoundError as re:
@@ -569,6 +614,7 @@ def get_settings():
 
 
 @app.post("/api/settings", tags=["Settings"])
+@app.put("/api/settings", tags=["Settings"])
 def update_settings(req: SettingsUpdateRequest):
     """Update user preferences and persist atomically."""
     settings = storage.load_settings()
@@ -593,6 +639,7 @@ def update_settings(req: SettingsUpdateRequest):
 # ==============================================================================
 
 @app.post("/api/seed-sample-data", tags=["Demo"])
+@app.post("/api/seed", tags=["Demo"])
 def seed_sample_data():
     """Populates realistic sample data (Google, Microsoft, Amazon, Stripe) for smooth project demos."""
     sample_records = [

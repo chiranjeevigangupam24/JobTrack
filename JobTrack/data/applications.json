@@ -720,54 +720,6 @@
         ]
     },
     {
-        "application_id": "APP-AA68A345",
-        "company_name": "Microsoft",
-        "job_role": "Backend Cloud Developer",
-        "location": "Hyderabad, India",
-        "job_type": "Full-time",
-        "job_description": "Azure cloud services, scalable REST APIs, and event-driven architectures.",
-        "application_date": "2026-10-10",
-        "application_deadline": "2026-10-30",
-        "job_url": "https://careers.microsoft.com/us/en/job/67890",
-        "min_salary": 110000.0,
-        "max_salary": 145000.0,
-        "status": "Offer Received",
-        "notes": "Official offer letter received! Base: $135k + stock options.",
-        "applicant_name": "Naga Chiranjeevi",
-        "created_at": "2026-11-04T20:33:08",
-        "updated_at": "2026-11-04T20:33:08",
-        "interviews": [
-            {
-                "interview_id": "INT-821F49ED",
-                "application_id": "APP-AA68A345",
-                "round_name": "Screening / HR",
-                "interview_date": "2026-10-14",
-                "interview_time": "11:00",
-                "interview_mode": "Online / Video",
-                "meeting_link": "https://teams.microsoft.com/l/meetup-join/123",
-                "interview_status": "Completed",
-                "prep_notes": "HR background discussion and salary expectations.\nOutcome Notes: Completed during sample seed.",
-                "outcome": "Passed",
-                "created_at": "2026-11-04T20:33:08",
-                "updated_at": "2026-11-04T20:33:08"
-            },
-            {
-                "interview_id": "INT-FA285E8E",
-                "application_id": "APP-AA68A345",
-                "round_name": "Final Round",
-                "interview_date": "2026-10-25",
-                "interview_time": "14:00",
-                "interview_mode": "Online / Video",
-                "meeting_link": "https://teams.microsoft.com/l/meetup-join/456",
-                "interview_status": "Completed",
-                "prep_notes": "Engineering Director cultural and architectural fit.\nOutcome Notes: Completed during sample seed.",
-                "outcome": "Passed",
-                "created_at": "2026-11-04T20:33:08",
-                "updated_at": "2026-11-04T20:33:08"
-            }
-        ]
-    },
-    {
         "application_id": "APP-91A436AE",
         "company_name": "Stripe",
         "job_role": "API Platform Engineer",
@@ -863,54 +815,6 @@
                 "interview_status": "Scheduled",
                 "prep_notes": "Distributed caching, rate limiters, and microservice communication.",
                 "outcome": "Pending",
-                "created_at": "2026-11-04T20:49:32",
-                "updated_at": "2026-11-04T20:49:32"
-            }
-        ]
-    },
-    {
-        "application_id": "APP-CE3951F2",
-        "company_name": "Microsoft",
-        "job_role": "Backend Cloud Developer",
-        "location": "Hyderabad, India",
-        "job_type": "Full-time",
-        "job_description": "Azure cloud services, scalable REST APIs, and event-driven architectures.",
-        "application_date": "2026-10-10",
-        "application_deadline": "2026-10-30",
-        "job_url": "https://careers.microsoft.com/us/en/job/67890",
-        "min_salary": 110000.0,
-        "max_salary": 145000.0,
-        "status": "Offer Received",
-        "notes": "Official offer letter received! Base: $135k + stock options.",
-        "applicant_name": "Chiranjeevi",
-        "created_at": "2026-11-04T20:49:32",
-        "updated_at": "2026-11-04T20:49:32",
-        "interviews": [
-            {
-                "interview_id": "INT-64336E77",
-                "application_id": "APP-CE3951F2",
-                "round_name": "Screening / HR",
-                "interview_date": "2026-10-14",
-                "interview_time": "11:00",
-                "interview_mode": "Online / Video",
-                "meeting_link": "https://teams.microsoft.com/l/meetup-join/123",
-                "interview_status": "Completed",
-                "prep_notes": "HR background discussion and salary expectations.\nOutcome Notes: Completed during sample seed.",
-                "outcome": "Passed",
-                "created_at": "2026-11-04T20:49:32",
-                "updated_at": "2026-11-04T20:49:32"
-            },
-            {
-                "interview_id": "INT-C74DE9C3",
-                "application_id": "APP-CE3951F2",
-                "round_name": "Final Round",
-                "interview_date": "2026-10-25",
-                "interview_time": "14:00",
-                "interview_mode": "Online / Video",
-                "meeting_link": "https://teams.microsoft.com/l/meetup-join/456",
-                "interview_status": "Completed",
-                "prep_notes": "Engineering Director cultural and architectural fit.\nOutcome Notes: Completed during sample seed.",
-                "outcome": "Passed",
                 "created_at": "2026-11-04T20:49:32",
                 "updated_at": "2026-11-04T20:49:32"
             }
@@ -1037,54 +941,6 @@
         ]
     },
     {
-        "application_id": "APP-EC5D7BBE",
-        "company_name": "Microsoft",
-        "job_role": "Backend Cloud Developer",
-        "location": "Hyderabad, India",
-        "job_type": "Full-time",
-        "job_description": "Azure cloud services, scalable REST APIs, and event-driven architectures.",
-        "application_date": "2026-10-10",
-        "application_deadline": "2026-10-30",
-        "job_url": "https://careers.microsoft.com/us/en/job/67890",
-        "min_salary": 110000.0,
-        "max_salary": 145000.0,
-        "status": "Offer Received",
-        "notes": "Official offer letter received! Base: $135k + stock options.",
-        "applicant_name": "Naga Chiranjeevi",
-        "created_at": "2026-11-04T20:51:16",
-        "updated_at": "2026-11-04T20:51:16",
-        "interviews": [
-            {
-                "interview_id": "INT-D8F2540D",
-                "application_id": "APP-EC5D7BBE",
-                "round_name": "Screening / HR",
-                "interview_date": "2026-10-14",
-                "interview_time": "11:00",
-                "interview_mode": "Online / Video",
-                "meeting_link": "https://teams.microsoft.com/l/meetup-join/123",
-                "interview_status": "Completed",
-                "prep_notes": "HR background discussion and salary expectations.\nOutcome Notes: Completed during sample seed.",
-                "outcome": "Passed",
-                "created_at": "2026-11-04T20:51:16",
-                "updated_at": "2026-11-04T20:51:16"
-            },
-            {
-                "interview_id": "INT-99C575D8",
-                "application_id": "APP-EC5D7BBE",
-                "round_name": "Final Round",
-                "interview_date": "2026-10-25",
-                "interview_time": "14:00",
-                "interview_mode": "Online / Video",
-                "meeting_link": "https://teams.microsoft.com/l/meetup-join/456",
-                "interview_status": "Completed",
-                "prep_notes": "Engineering Director cultural and architectural fit.\nOutcome Notes: Completed during sample seed.",
-                "outcome": "Passed",
-                "created_at": "2026-11-04T20:51:16",
-                "updated_at": "2026-11-04T20:51:16"
-            }
-        ]
-    },
-    {
         "application_id": "APP-D4ECD19B",
         "company_name": "Amazon",
         "job_role": "Frontend React Engineer",
@@ -1199,54 +1055,6 @@
                 "interview_status": "Scheduled",
                 "prep_notes": "Distributed caching, rate limiters, and microservice communication.",
                 "outcome": "Pending",
-                "created_at": "2026-11-04T20:53:17",
-                "updated_at": "2026-11-04T20:53:17"
-            }
-        ]
-    },
-    {
-        "application_id": "APP-77EA61A4",
-        "company_name": "Microsoft",
-        "job_role": "Backend Cloud Developer",
-        "location": "Hyderabad, India",
-        "job_type": "Full-time",
-        "job_description": "Azure cloud services, scalable REST APIs, and event-driven architectures.",
-        "application_date": "2026-10-10",
-        "application_deadline": "2026-10-30",
-        "job_url": "https://careers.microsoft.com/us/en/job/67890",
-        "min_salary": 110000.0,
-        "max_salary": 145000.0,
-        "status": "Offer Received",
-        "notes": "Official offer letter received! Base: $135k + stock options.",
-        "applicant_name": "Naga Chiranjeevi",
-        "created_at": "2026-11-04T20:53:17",
-        "updated_at": "2026-11-04T20:53:17",
-        "interviews": [
-            {
-                "interview_id": "INT-BD945E1D",
-                "application_id": "APP-77EA61A4",
-                "round_name": "Screening / HR",
-                "interview_date": "2026-10-14",
-                "interview_time": "11:00",
-                "interview_mode": "Online / Video",
-                "meeting_link": "https://teams.microsoft.com/l/meetup-join/123",
-                "interview_status": "Completed",
-                "prep_notes": "HR background discussion and salary expectations.\nOutcome Notes: Completed during sample seed.",
-                "outcome": "Passed",
-                "created_at": "2026-11-04T20:53:17",
-                "updated_at": "2026-11-04T20:53:17"
-            },
-            {
-                "interview_id": "INT-73D6A321",
-                "application_id": "APP-77EA61A4",
-                "round_name": "Final Round",
-                "interview_date": "2026-10-25",
-                "interview_time": "14:00",
-                "interview_mode": "Online / Video",
-                "meeting_link": "https://teams.microsoft.com/l/meetup-join/456",
-                "interview_status": "Completed",
-                "prep_notes": "Engineering Director cultural and architectural fit.\nOutcome Notes: Completed during sample seed.",
-                "outcome": "Passed",
                 "created_at": "2026-11-04T20:53:17",
                 "updated_at": "2026-11-04T20:53:17"
             }
@@ -1373,54 +1181,6 @@
         ]
     },
     {
-        "application_id": "APP-3B0B76C2",
-        "company_name": "Microsoft",
-        "job_role": "Backend Cloud Developer",
-        "location": "Hyderabad, India",
-        "job_type": "Full-time",
-        "job_description": "Azure cloud services, scalable REST APIs, and event-driven architectures.",
-        "application_date": "2026-10-10",
-        "application_deadline": "2026-10-30",
-        "job_url": "https://careers.microsoft.com/us/en/job/67890",
-        "min_salary": 110000.0,
-        "max_salary": 145000.0,
-        "status": "Offer Received",
-        "notes": "Official offer letter received! Base: $135k + stock options.",
-        "applicant_name": "Naga Chiranjeevi",
-        "created_at": "2026-11-04T21:06:05",
-        "updated_at": "2026-11-04T21:06:05",
-        "interviews": [
-            {
-                "interview_id": "INT-9847BEDA",
-                "application_id": "APP-3B0B76C2",
-                "round_name": "Screening / HR",
-                "interview_date": "2026-10-14",
-                "interview_time": "11:00",
-                "interview_mode": "Online / Video",
-                "meeting_link": "https://teams.microsoft.com/l/meetup-join/123",
-                "interview_status": "Completed",
-                "prep_notes": "HR background discussion and salary expectations.\nOutcome Notes: Completed during sample seed.",
-                "outcome": "Passed",
-                "created_at": "2026-11-04T21:06:05",
-                "updated_at": "2026-11-04T21:06:05"
-            },
-            {
-                "interview_id": "INT-49F957E4",
-                "application_id": "APP-3B0B76C2",
-                "round_name": "Final Round",
-                "interview_date": "2026-10-25",
-                "interview_time": "14:00",
-                "interview_mode": "Online / Video",
-                "meeting_link": "https://teams.microsoft.com/l/meetup-join/456",
-                "interview_status": "Completed",
-                "prep_notes": "Engineering Director cultural and architectural fit.\nOutcome Notes: Completed during sample seed.",
-                "outcome": "Passed",
-                "created_at": "2026-11-04T21:06:05",
-                "updated_at": "2026-11-04T21:06:05"
-            }
-        ]
-    },
-    {
         "application_id": "APP-5E8A9597",
         "company_name": "Amazon",
         "job_role": "Frontend React Engineer",
@@ -1491,5 +1251,43 @@
                 "updated_at": "2026-11-04T21:06:05"
             }
         ]
+    },
+    {
+        "application_id": "APP-25BB560C",
+        "company_name": "Test Company",
+        "job_role": "Software Engineer",
+        "location": "Remote",
+        "job_type": "Full-time",
+        "job_description": "Test desc",
+        "application_date": "2026-11-05",
+        "application_deadline": null,
+        "job_url": null,
+        "min_salary": null,
+        "max_salary": null,
+        "status": "Applied",
+        "notes": "Test note",
+        "applicant_name": "Naga Chiranjeevi",
+        "created_at": "2026-11-06T00:04:03",
+        "updated_at": "2026-11-06T00:04:03",
+        "interviews": []
+    },
+    {
+        "application_id": "APP-667308EC",
+        "company_name": "tcs",
+        "job_role": "software engineer",
+        "location": "Hyderabad",
+        "job_type": "Full-time",
+        "job_description": "",
+        "application_date": "2026-11-05",
+        "application_deadline": "2026-11-22",
+        "job_url": null,
+        "min_salary": 50000.0,
+        "max_salary": null,
+        "status": "Applied",
+        "notes": "",
+        "applicant_name": "Naga Chiranjeevi",
+        "created_at": "2026-11-06T00:16:15",
+        "updated_at": "2026-11-06T00:16:15",
+        "interviews": []
     }
 ]
