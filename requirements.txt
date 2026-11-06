@@ -1,0 +1,16 @@
+# JobTrack Pro — Python Dependencies
+# ------------------------------------------------------------------------------
+# 1. CORE CLI ENGINE:
+# Runs with Python Standard Library alone (Python 3.8+). No pip packages needed!
+#
+# 2. WEB DASHBOARD & REST API:
+# Install to run the responsive web dashboard and FastAPI REST backend:
+#   pip install -r requirements.txt
+#   python server.py
+# ------------------------------------------------------------------------------
+
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+pydantic>=2.0.0
+httpx>=0.24.0
+
