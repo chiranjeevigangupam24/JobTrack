@@ -1,717 +1,827 @@
-#!/usr/bin/env python3
-"""JobTrack Pro — Root Web Dashboard & Built-in REST API Server.
+"""JobTrack Pro — FastAPI Backend Server & RESTful API.
 
-Permits executing 'python server.py' directly from the workspace root.
-- Automatic Pure Standard Library Mode: Built-in resilient REST API engine and
-  static web server with zero external dependencies, persistent JSON storage,
-  and anti-caching headers for instant updates!
-- Full FastAPI Mode (optional): When fastapi & uvicorn are installed, seamlessly
-  delegates to the ASGI application.
+This module exposes clean, human-readable REST API endpoints connecting the
+Tailwind CSS + React frontend dashboard to the core JobTrack domain services.
+
+Architecture Overview:
+- FastAPI & Uvicorn: Asynchronous ASGI web framework and server.
+- Pydantic v2: Strong typing, automatic schema generation, and request validation.
+- JSONStorage: Resilient atomic file persistence (applications.json & settings.json).
+- Domain Services:
+    * ApplicationService: Application CRUD, case-insensitive search, and filtering.
+    * InterviewService: Interview round lifecycle, meeting links, and outcome recording.
+    * ReminderService: Proactive tracking of today's interviews and approaching deadlines.
+    * AnalyticsService: Conversion funnel rates and pipeline distributions.
+    * CSVExporter: Spreadsheet-safe exports with formula injection defense.
 """
 
-import datetime
-import http.server
-import importlib.util
-import json
-import mimetypes
-import os
-import re
-import socketserver
 import sys
-import urllib.parse
-import uuid
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
-ROOT_DIR = Path(__file__).resolve().parent
-CANDIDATE_PATHS = [
-    ROOT_DIR / "JobTrack" / "JobTrack",
-    ROOT_DIR / "JobTrack",
-    ROOT_DIR,
-]
+# Ensure JobTrack root and 'src' package are importable regardless of launch folder
+PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-PROJECT_DIR = None
-for p in CANDIDATE_PATHS:
-    if (p / "src").exists() and (p / "data").exists() and (p / "frontend").exists():
-        PROJECT_DIR = p
-        break
+from fastapi import FastAPI, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
-if PROJECT_DIR is None:
-    PROJECT_DIR = ROOT_DIR / "JobTrack" / "JobTrack"
+from src.models.application import (
+    ApplicationStatus,
+    InterviewMode,
+    InterviewOutcome,
+    InterviewRound,
+    InterviewStatus,
+    JobType,
+)
+from src.reports.csv_exporter import CSVExporter
+from src.services.analytics_service import AnalyticsService
+from src.services.application_service import ApplicationService, RecordNotFoundError
+from src.services.interview_service import InterviewService
+from src.services.reminder_service import ReminderService
+from src.storage.json_storage import JSONStorage
+from src.utils.date_utils import get_current_date
+from src.utils.validators import ValidationError
 
-DATA_DIR = PROJECT_DIR / "data"
-FRONTEND_DIR = PROJECT_DIR / "frontend"
+# ------------------------------------------------------------------------------
+# 1. Service Initialization (Singletons for clean dependency injection)
+# ------------------------------------------------------------------------------
+storage = JSONStorage(data_dir=PROJECT_ROOT / "data")
+app_service = ApplicationService(storage=storage)
+interview_service = InterviewService(app_service=app_service)
+reminder_service = ReminderService(app_service=app_service)
+analytics_service = AnalyticsService(app_service=app_service)
+csv_exporter = CSVExporter(export_dir=PROJECT_ROOT / "exports")
 
-if str(PROJECT_DIR) not in sys.path:
-    sys.path.insert(0, str(PROJECT_DIR))
+# ------------------------------------------------------------------------------
+# 2. FastAPI Application Setup
+# ------------------------------------------------------------------------------
+app = FastAPI(
+    title="JobTrack Pro API",
+    description="RESTful API for JobTrack — Personal Job Application & Interview Pipeline Manager",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+# Enable Cross-Origin Resource Sharing (CORS) so the frontend connects smoothly
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ==============================================================================
-# Built-in Standard Library REST Engine for Zero-Install Persistence
+# 3. Pydantic Schemas (Input Data Transfer Objects with Human-Friendly Docs)
 # ==============================================================================
 
-class BuiltinAPIEngine:
-    """Zero-dependency REST API engine reading/writing JobTrack JSON storage."""
+class ApplicationCreateRequest(BaseModel):
+    """Schema for creating a new job application."""
+    company_name: str = Field(..., description="Target company name (e.g. Google, Microsoft)")
+    job_role: str = Field(..., description="Job role or title (e.g. Full Stack Developer)")
+    location: Optional[str] = Field("Remote", description="Job location (City, State, or Remote)")
+    job_type: Optional[str] = Field("Full-time", description="Employment type (Full-time, Part-time, Internship, etc.)")
+    job_description: Optional[str] = Field("", description="Optional job snippet, requirements, or tech stack")
+    application_date: Optional[str] = Field(None, description="ISO date (YYYY-MM-DD); defaults to today if omitted")
+    application_deadline: Optional[str] = Field(None, description="Optional deadline ISO date (YYYY-MM-DD)")
+    job_url: Optional[str] = Field(None, description="Optional URL to job posting (must start with http:// or https://)")
+    min_salary: Optional[Union[float, int, str]] = Field(None, description="Minimum expected salary (annual/base)")
+    max_salary: Optional[Union[float, int, str]] = Field(None, description="Maximum expected salary (annual/base)")
+    status: Optional[str] = Field("Applied", description="Initial application status (defaults to 'Applied')")
+    notes: Optional[str] = Field("", description="Personal notes, referrals, recruiter contact info")
+    applicant_name: Optional[str] = Field("Naga Chiranjeevi", description="Name of the applicant / candidate")
 
-    def __init__(self, data_dir: Path):
-        self.data_dir = data_dir
-        self.apps_file = data_dir / "applications.json"
-        self.settings_file = data_dir / "settings.json"
 
-    def load_applications(self) -> list:
-        if self.apps_file.exists():
-            try:
-                with open(self.apps_file, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception:
-                return []
-        return []
+class ApplicationUpdateRequest(BaseModel):
+    """Schema for updating an existing job application. All fields are optional."""
+    company_name: Optional[str] = None
+    job_role: Optional[str] = None
+    location: Optional[str] = None
+    job_type: Optional[str] = None
+    job_description: Optional[str] = None
+    application_date: Optional[str] = None
+    application_deadline: Optional[str] = None
+    job_url: Optional[str] = None
+    min_salary: Optional[Union[float, int, str]] = None
+    max_salary: Optional[Union[float, int, str]] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+    applicant_name: Optional[str] = None
 
-    def save_applications(self, apps: list):
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        temp_file = self.apps_file.with_suffix(".tmp")
-        with open(temp_file, "w", encoding="utf-8") as f:
-            json.dump(apps, f, indent=4)
-        temp_file.replace(self.apps_file)
 
-    def load_settings(self) -> dict:
-        if self.settings_file.exists():
-            try:
-                with open(self.settings_file, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception:
-                pass
-        return {
-            "applicant_name": "Naga Chiranjeevi",
-            "theme_mode": "dark",
-            "reminder_window_days": 14,
-            "default_application_status": "Applied",
-            "date_display_format": "%d-%m-%Y"
+class InterviewCreateRequest(BaseModel):
+    """Schema for scheduling a new interview round."""
+    application_id: str = Field(..., description="Unique ID of the parent application (e.g. APP-12345678)")
+    round_name: str = Field(..., description="Round title (e.g. Technical, HR, Coding Assessment, System Design)")
+    interview_date: str = Field(..., description="Scheduled date in YYYY-MM-DD format")
+    interview_time: str = Field(..., description="Scheduled 24-hour time in HH:MM format (e.g. 14:30)")
+    interview_mode: Optional[str] = Field("Online / Video", description="Online / Video, In-person, or Phone")
+    meeting_link: Optional[str] = Field(None, description="Video link URL (Google Meet, Zoom, MS Teams)")
+    prep_notes: Optional[str] = Field("", description="Topics to prepare, recruiter feedback, questions to ask")
+
+
+class InterviewUpdateRequest(BaseModel):
+    """Schema for editing an existing interview round."""
+    round_name: Optional[str] = None
+    interview_date: Optional[str] = None
+    interview_time: Optional[str] = None
+    interview_mode: Optional[str] = None
+    meeting_link: Optional[str] = None
+    interview_status: Optional[str] = None
+    prep_notes: Optional[str] = None
+    outcome: Optional[str] = None
+
+
+class InterviewOutcomeRequest(BaseModel):
+    """Schema for recording the outcome of a completed interview."""
+    outcome: str = Field(..., description="Passed, Failed, or Pending")
+    notes: Optional[str] = Field("", description="Reflections, feedback received, or areas to improve")
+
+
+class InterviewCancelRequest(BaseModel):
+    """Schema for cancelling an interview round."""
+    reason: Optional[str] = Field("", description="Reason for cancellation (e.g. Rescheduled by recruiter)")
+
+
+class SettingsUpdateRequest(BaseModel):
+    """Schema for updating application preferences."""
+    applicant_name: Optional[str] = Field(None, description="Candidate / applicant full name")
+    theme_mode: Optional[str] = Field(None, description="Theme appearance mode ('light' or 'dark')")
+    reminder_window_days: Optional[int] = Field(None, ge=1, le=90, description="Reminder lookahead window in days (1-90)")
+    default_application_status: Optional[str] = Field(None, description="Default status for newly created applications")
+    date_display_format: Optional[str] = Field(None, description="Date presentation pattern (e.g. %Y-%m-%d)")
+
+
+# ==============================================================================
+# 4. System & Metadata Endpoints
+# ==============================================================================
+
+@app.get("/api/health", tags=["System"])
+def health_check():
+    """Health check endpoint confirming that the backend server is active and accessible."""
+    return {
+        "status": "online",
+        "service": "JobTrack Pro API",
+        "version": "2.0.0",
+        "storage_dir": str(storage.data_dir),
+    }
+
+
+@app.get("/api/meta", tags=["System"])
+def get_metadata():
+    """Returns standard dropdown choices (statuses, job types, interview rounds) for frontend forms."""
+    return {
+        "application_statuses": ApplicationStatus.list_values(),
+        "job_types": JobType.list_values(),
+        "interview_rounds": InterviewRound.list_values(),
+        "interview_modes": InterviewMode.list_values(),
+        "interview_statuses": InterviewStatus.list_values(),
+        "interview_outcomes": InterviewOutcome.list_values(),
+    }
+
+
+# ==============================================================================
+# 5. Dashboard Overview Endpoint
+# ==============================================================================
+
+@app.get("/api/dashboard", tags=["Dashboard"])
+def get_dashboard():
+    """Unified dashboard endpoint providing KPIs, stage distributions, urgent alerts, and recent applications."""
+    app_service.reload()
+    summary = analytics_service.calculate_summary()
+    reminders = reminder_service.get_all_reminders_summary()
+    apps = app_service.get_all_applications(sort_by_date_desc=True)
+    settings = storage.load_settings()
+
+    # Format today's interviews into clean objects for frontend display
+    today_interviews = [
+        {
+            "application_id": app.application_id,
+            "company_name": app.company_name,
+            "job_role": app.job_role,
+            "round_name": iv.round_name,
+            "interview_time": iv.interview_time,
+            "meeting_link": iv.meeting_link,
+            "interview_mode": iv.interview_mode,
         }
+        for app, iv in reminders["interviews_today"]
+    ]
 
-    def save_settings(self, settings: dict):
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        with open(self.settings_file, "w", encoding="utf-8") as f:
-            json.dump(settings, f, indent=4)
-
-    def get_meta(self) -> dict:
-        return {
-            "statuses": [
-                "Applied", "Assessment", "Interview", "Offer Received",
-                "Selected", "Rejected", "Withdrawn"
-            ],
-            "job_types": [
-                "Full-time", "Part-time", "Contract", "Internship", "Freelance", "Remote"
-            ],
-            "interview_rounds": [
-                "Recruiter Screening", "Technical Assessment", "System Design",
-                "Behavioral & Cultural", "Managerial Round", "HR Discussion",
-                "Final Round", "Other"
-            ],
-            "interview_modes": [
-                "Online / Video", "Phone Call", "In-Person / Onsite"
-            ],
-            "interview_outcomes": [
-                "Pending", "Passed", "Failed", "On Hold"
-            ]
+    # Format upcoming interviews within the reminder window
+    upcoming_interviews = [
+        {
+            "application_id": app.application_id,
+            "company_name": app.company_name,
+            "job_role": app.job_role,
+            "round_name": iv.round_name,
+            "interview_date": iv.interview_date,
+            "interview_time": iv.interview_time,
+            "meeting_link": iv.meeting_link,
         }
+        for app, iv in reminders["upcoming_interviews"]
+    ]
 
-    def get_applications(self, search: str = "", status: str = "", job_type: str = "") -> list:
-        apps = self.load_applications()
-        result = apps
-
-        if search:
-            q = search.lower()
-            result = [
-                a for a in result
-                if q in a.get("company_name", "").lower()
-                or q in a.get("job_role", "").lower()
-                or q in a.get("location", "").lower()
-                or q in a.get("notes", "").lower()
-            ]
-
-        if status and status != "All":
-            result = [a for a in result if a.get("status") == status]
-
-        if job_type and job_type != "All":
-            result = [a for a in result if a.get("job_type") == job_type]
-
-        # Sort descending by application_date or created_at
-        result.sort(key=lambda a: (a.get("application_date") or a.get("created_at") or ""), reverse=True)
-        return result
-
-    def get_application_by_id(self, app_id: str) -> dict:
-        apps = self.load_applications()
-        for a in apps:
-            if a.get("application_id") == app_id:
-                return a
-        return None
-
-    def create_application(self, data: dict) -> dict:
-        apps = self.load_applications()
-        now_str = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        app_id = f"APP-{uuid.uuid4().hex[:8].upper()}"
-        settings = self.load_settings()
-
-        min_sal = data.get("min_salary")
-        max_sal = data.get("max_salary")
-        try:
-            clean_min = float(min_sal) if min_sal not in (None, "", "null") else None
-        except (ValueError, TypeError):
-            clean_min = None
-        try:
-            clean_max = float(max_sal) if max_sal not in (None, "", "null") else None
-        except (ValueError, TypeError):
-            clean_max = None
-
-        new_app = {
-            "application_id": app_id,
-            "company_name": data.get("company_name", "").strip(),
-            "job_role": data.get("job_role", "").strip(),
-            "location": data.get("location", "").strip(),
-            "job_type": data.get("job_type", "Full-time"),
-            "job_description": data.get("job_description", ""),
-            "application_date": data.get("application_date") or datetime.date.today().isoformat(),
-            "application_deadline": data.get("application_deadline") or None,
-            "job_url": data.get("job_url", ""),
-            "min_salary": clean_min,
-            "max_salary": clean_max,
-            "status": data.get("status", "Applied"),
-            "notes": data.get("notes", ""),
-            "applicant_name": settings.get("applicant_name", "Naga Chiranjeevi"),
-            "created_at": now_str,
-            "updated_at": now_str,
-            "interviews": []
+    # Format overdue deadlines for active applications
+    overdue_deadlines = [
+        {
+            "application_id": app.application_id,
+            "company_name": app.company_name,
+            "job_role": app.job_role,
+            "deadline": app.application_deadline,
+            "status": app.status.value,
         }
-        apps.insert(0, new_app)
-        self.save_applications(apps)
-        return new_app
+        for app in reminders["overdue_deadlines"]
+    ]
 
-    def update_application(self, app_id: str, data: dict) -> dict:
-        apps = self.load_applications()
-        target = None
-        for a in apps:
-            if a.get("application_id") == app_id:
-                target = a
-                break
-        if not target:
-            return None
-
-        # Update fields
-        for field in [
-            "company_name", "job_role", "location", "job_type", "job_description",
-            "application_date", "application_deadline", "job_url", "status", "notes"
-        ]:
-            if field in data:
-                target[field] = data[field]
-
-        if "min_salary" in data:
-            val = data["min_salary"]
-            try:
-                target["min_salary"] = float(val) if val not in (None, "", "null") else None
-            except (ValueError, TypeError):
-                target["min_salary"] = None
-        if "max_salary" in data:
-            val = data["max_salary"]
-            try:
-                target["max_salary"] = float(val) if val not in (None, "", "null") else None
-            except (ValueError, TypeError):
-                target["max_salary"] = None
-
-        target["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        self.save_applications(apps)
-        return target
-
-    def delete_application(self, app_id: str) -> bool:
-        apps = self.load_applications()
-        new_apps = [a for a in apps if a.get("application_id") != app_id]
-        if len(new_apps) == len(apps):
-            return False
-        self.save_applications(new_apps)
-        return True
-
-    def get_all_interviews(self) -> list:
-        apps = self.load_applications()
-        interviews = []
-        for a in apps:
-            for iv in a.get("interviews", []):
-                enriched = dict(iv)
-                enriched["company_name"] = a.get("company_name", "")
-                enriched["job_role"] = a.get("job_role", "")
-                enriched["location"] = a.get("location", "")
-                interviews.append(enriched)
-        interviews.sort(key=lambda i: (i.get("interview_date") or "", i.get("interview_time") or ""), reverse=True)
-        return interviews
-
-    def schedule_interview(self, data: dict) -> dict:
-        app_id = data.get("application_id")
-        apps = self.load_applications()
-        target = None
-        for a in apps:
-            if a.get("application_id") == app_id:
-                target = a
-                break
-        if not target:
-            return None
-
-        iv_id = f"INT-{uuid.uuid4().hex[:8].upper()}"
-        now_str = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        new_round = {
-            "interview_id": iv_id,
-            "application_id": app_id,
-            "round_name": data.get("round_name", "Technical Assessment"),
-            "interview_date": data.get("interview_date") or datetime.date.today().isoformat(),
-            "interview_time": data.get("interview_time", "10:00"),
-            "interview_mode": data.get("interview_mode", "Online / Video"),
-            "meeting_link": data.get("meeting_link", ""),
-            "interview_status": "Scheduled",
-            "prep_notes": data.get("prep_notes", ""),
-            "outcome": "Pending",
-            "created_at": now_str,
-            "updated_at": now_str,
+    # Format upcoming deadlines
+    upcoming_deadlines = [
+        {
+            "application_id": app.application_id,
+            "company_name": app.company_name,
+            "job_role": app.job_role,
+            "deadline": app.application_deadline,
+            "status": app.status.value,
         }
-        if "interviews" not in target:
-            target["interviews"] = []
-        target["interviews"].append(new_round)
-        if target.get("status") in ["Applied", "Assessment"]:
-            target["status"] = "Interview"
-        target["updated_at"] = now_str
-        self.save_applications(apps)
-        return new_round
+        for app in reminders["upcoming_deadlines"]
+    ]
 
-    def record_outcome(self, app_id: str, iv_id: str, data: dict) -> dict:
-        apps = self.load_applications()
-        for a in apps:
-            if a.get("application_id") == app_id:
-                for iv in a.get("interviews", []):
-                    if iv.get("interview_id") == iv_id:
-                        iv["outcome"] = data.get("outcome", "Passed")
-                        if iv["outcome"] in ["Passed", "Failed"]:
-                            iv["interview_status"] = "Completed"
-                        if data.get("notes"):
-                            iv["prep_notes"] = f"{iv.get('prep_notes', '')}\nOutcome Notes: {data['notes']}".strip()
-                        iv["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-                        
-                        if data.get("update_app_status"):
-                            a["status"] = data["update_app_status"]
-                        elif iv["outcome"] == "Failed":
-                            a["status"] = "Rejected"
-                        elif iv["outcome"] == "Passed" and a.get("status") == "Interview":
-                            a["status"] = "Offer Received"
-                        
-                        a["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-                        self.save_applications(apps)
-                        return a
-        return None
-
-    def cancel_interview(self, app_id: str, iv_id: str, reason: str = "") -> dict:
-        apps = self.load_applications()
-        for a in apps:
-            if a.get("application_id") == app_id:
-                for iv in a.get("interviews", []):
-                    if iv.get("interview_id") == iv_id:
-                        iv["interview_status"] = "Cancelled"
-                        if reason:
-                            iv["prep_notes"] = f"{iv.get('prep_notes', '')}\nCancelled: {reason}".strip()
-                        iv["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-                        a["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-                        self.save_applications(apps)
-                        return a
-        return None
-
-    def get_reminders(self, window_days: int = 14) -> dict:
-        apps = self.load_applications()
-        today = datetime.date.today()
-        today_str = today.isoformat()
-        cutoff_date = (today + datetime.timedelta(days=window_days)).isoformat()
-
-        interviews_today = []
-        upcoming_deadlines = []
-        overdue_deadlines = []
-
-        for a in apps:
-            # Check interview rounds
-            for iv in a.get("interviews", []):
-                if iv.get("interview_date") == today_str and iv.get("interview_status") == "Scheduled":
-                    iv_copy = dict(iv)
-                    iv_copy["company_name"] = a.get("company_name")
-                    iv_copy["job_role"] = a.get("job_role")
-                    interviews_today.append(iv_copy)
-
-            # Check deadlines
-            deadline = a.get("application_deadline")
-            if deadline and a.get("status") not in ["Selected", "Rejected", "Withdrawn"]:
-                if today_str <= deadline <= cutoff_date:
-                    upcoming_deadlines.append(a)
-                elif deadline < today_str and a.get("status") in ["Applied", "Assessment"]:
-                    overdue_deadlines.append(a)
-
-        return {
-            "interviews_today": interviews_today,
-            "upcoming_deadlines": upcoming_deadlines,
+    return {
+        "applicant_name": settings.get("applicant_name", "Naga Chiranjeevi"),
+        "theme_mode": settings.get("theme_mode", "dark"),
+        "kpis": {
+            "total_applications": summary.total_applications,
+            "offers_received": summary.offers_received,
+            "rejected_applications": summary.rejected_applications,
+            "withdrawn_applications": summary.withdrawn_applications,
+            "total_interviews": summary.total_interviews,
+            "scheduled_interviews": summary.scheduled_interviews,
+            "completed_interviews": summary.completed_interviews,
+            "interview_conversion_rate": summary.interview_conversion_rate,
+            "offer_conversion_rate": summary.offer_conversion_rate,
+            "interview_to_offer_rate": summary.interview_to_offer_rate,
+        },
+        "status_distribution": summary.status_counts,
+        "company_distribution": summary.company_counts,
+        "role_distribution": summary.role_counts,
+        "job_type_distribution": summary.job_type_counts,
+        "alerts": {
+            "total_alerts": reminders["total_reminders"],
+            "interviews_today": today_interviews,
+            "upcoming_interviews": upcoming_interviews,
             "overdue_deadlines": overdue_deadlines,
-            "summary": {
-                "interviews_today_count": len(interviews_today),
-                "upcoming_deadlines_count": len(upcoming_deadlines),
-                "overdue_deadlines_count": len(overdue_deadlines),
-            }
-        }
+            "upcoming_deadlines": upcoming_deadlines,
+        },
+        "recent_applications": [a.to_dict() for a in apps[:6]],
+    }
 
-    def get_dashboard(self) -> dict:
-        apps = self.load_applications()
-        settings = self.load_settings()
-        total = len(apps)
-        active = len([a for a in apps if a.get("status") not in ["Selected", "Rejected", "Withdrawn"]])
-        interviews_cnt = len([a for a in apps if a.get("status") == "Interview"])
-        offers = len([a for a in apps if a.get("status") in ["Offer Received", "Selected"]])
 
-        statuses = ["Applied", "Assessment", "Interview", "Offer Received", "Selected", "Rejected", "Withdrawn"]
-        pipeline = {s: 0 for s in statuses}
-        for a in apps:
-            st = a.get("status", "Applied")
-            if st in pipeline:
-                pipeline[st] += 1
-            else:
-                pipeline[st] = 1
+# ==============================================================================
+# 6. Job Applications CRUD & Search Endpoints
+# ==============================================================================
 
-        interview_rate = round((interviews_cnt / total * 100), 1) if total > 0 else 0.0
-        offer_rate = round((offers / total * 100), 1) if total > 0 else 0.0
+@app.get("/api/applications", tags=["Applications"])
+def list_applications(
+    search: Optional[str] = Query(None, description="Search keyword across company, role, location, ID"),
+    status: Optional[str] = Query(None, description="Filter by status (e.g. Applied, Interview, Offer Received)"),
+    job_type: Optional[str] = Query(None, description="Filter by job type (e.g. Full-time, Internship)"),
+    start_date: Optional[str] = Query(None, description="Filter by start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="Filter by end date (YYYY-MM-DD)"),
+):
+    """Retrieve job applications with real-time substring search and multi-criteria filtering."""
+    app_service.reload()
 
-        all_ivs = self.get_all_interviews()
-        upcoming = [i for i in all_ivs if i.get("interview_status") == "Scheduled"][:5]
+    # 1. If text search is specified
+    if search and search.strip():
+        apps = app_service.search_applications(search.strip())
+        # Refine search results if extra filters are present
+        if status and status.strip() and status.strip().lower() != "all":
+            apps = [a for a in apps if a.status.value.lower() == status.strip().lower()]
+        if job_type and job_type.strip() and job_type.strip().lower() != "all":
+            apps = [a for a in apps if a.job_type.lower() == job_type.strip().lower()]
+        return [a.to_dict() for a in apps]
 
-        return {
-            "kpis": {
-                "total_applications": total,
-                "active_applications": active,
-                "interviews_scheduled": interviews_cnt,
-                "offers_received": offers,
-                "interview_conversion_rate": interview_rate,
-                "offer_conversion_rate": offer_rate,
-            },
-            "pipeline_by_status": pipeline,
-            "upcoming_interviews": upcoming,
-            "applicant_name": settings.get("applicant_name", "Naga Chiranjeevi"),
-        }
+    # 2. If status, job type, or date range filters are specified
+    clean_status = status.strip() if status and status.strip().lower() != "all" else None
+    clean_type = job_type.strip() if job_type and job_type.strip().lower() != "all" else None
 
-    def generate_csv_export(self, export_type: str, status_filter: str = "") -> tuple:
-        """Generate spreadsheet-safe CSV export disarming '=', '+', '-', '@' triggers."""
-        import csv
-        import io
+    if clean_status or clean_type or (start_date and end_date):
+        apps = app_service.filter_applications(
+            status=clean_status,
+            job_type=clean_type,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return [a.to_dict() for a in apps]
 
-        def sanitize(val):
-            if val is None:
-                return ""
-            s = str(val).strip()
-            if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
-                return f"'{s}"
-            return s
+    # 3. Default: return all applications sorted by application date descending
+    apps = app_service.get_all_applications(sort_by_date_desc=True)
+    return [a.to_dict() for a in apps]
 
+
+@app.post("/api/applications", status_code=status.HTTP_201_CREATED, tags=["Applications"])
+def create_application(req: ApplicationCreateRequest):
+    """Create, validate, persist, and return a new job application."""
+    try:
+        # Normalize optional URL and deadline
+        clean_url = req.job_url.strip() if req.job_url else None
+        if clean_url and not clean_url.startswith("http://") and not clean_url.startswith("https://"):
+            clean_url = f"https://{clean_url}"
+        
+        clean_deadline = req.application_deadline.strip() if req.application_deadline else None
+        if clean_deadline == "":
+            clean_deadline = None
+
+        clean_min = None
+        if req.min_salary not in (None, "", "null"):
+            try:
+                clean_min = float(req.min_salary)
+            except (ValueError, TypeError):
+                clean_min = None
+
+        clean_max = None
+        if req.max_salary not in (None, "", "null"):
+            try:
+                clean_max = float(req.max_salary)
+            except (ValueError, TypeError):
+                clean_max = None
+
+        app = app_service.add_application(
+            company_name=req.company_name.strip(),
+            job_role=req.job_role.strip(),
+            location=req.location.strip() if req.location else "Remote",
+            job_type=req.job_type.strip() if req.job_type else "Full-time",
+            job_description=req.job_description or "",
+            application_date=req.application_date,
+            application_deadline=clean_deadline,
+            job_url=clean_url,
+            min_salary=clean_min,
+            max_salary=clean_max,
+            status=req.status or "Applied",
+            notes=req.notes or "",
+            applicant_name=req.applicant_name or "Naga Chiranjeevi",
+        )
+        return {"success": True, "data": app.to_dict()}
+    except ValidationError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create application: {e}")
+
+
+@app.get("/api/applications/{app_id}", tags=["Applications"])
+def get_application_by_id(app_id: str):
+    """Retrieve full details of a specific job application including interview history."""
+    app_service.reload()
+    app = app_service.get_application_by_id(app_id)
+    if not app:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Application with ID '{app_id}' was not found. Please verify the ID."
+        )
+    return app.to_dict()
+
+
+@app.put("/api/applications/{app_id}", tags=["Applications"])
+def update_application(app_id: str, req: ApplicationUpdateRequest):
+    """Update fields on an existing application while preserving all interview history."""
+    try:
+        # Extract fields provided by the caller
+        update_data = {k: v for k, v in req.model_dump().items() if v is not None}
+        if "job_url" in update_data and update_data["job_url"]:
+            clean_u = str(update_data["job_url"]).strip()
+            if clean_u and not clean_u.startswith("http://") and not clean_u.startswith("https://"):
+                clean_u = f"https://{clean_u}"
+            update_data["job_url"] = clean_u or None
+        if "application_deadline" in update_data and not update_data["application_deadline"]:
+            update_data["application_deadline"] = None
+
+        if "min_salary" in update_data:
+            val = update_data["min_salary"]
+            try:
+                update_data["min_salary"] = float(val) if val not in (None, "", "null") else None
+            except (ValueError, TypeError):
+                update_data["min_salary"] = None
+
+        if "max_salary" in update_data:
+            val = update_data["max_salary"]
+            try:
+                update_data["max_salary"] = float(val) if val not in (None, "", "null") else None
+            except (ValueError, TypeError):
+                update_data["max_salary"] = None
+
+        updated_app = app_service.update_application(app_id, **update_data)
+        return {"success": True, "data": updated_app.to_dict()}
+    except RecordNotFoundError as re:
+        raise HTTPException(status_code=404, detail=str(re))
+    except ValidationError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update application: {e}")
+
+
+@app.delete("/api/applications/{app_id}", tags=["Applications"])
+def delete_application(app_id: str):
+    """Permanently delete a job application and its associated interview rounds."""
+    try:
+        app_service.delete_application(app_id)
+        return {"success": True, "message": f"Application '{app_id}' has been permanently deleted."}
+    except RecordNotFoundError as re:
+        raise HTTPException(status_code=404, detail=str(re))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete application: {e}")
+
+
+# ==============================================================================
+# 7. Interview Management Endpoints
+# ==============================================================================
+
+@app.get("/api/interviews", tags=["Interviews"])
+def list_all_interviews():
+    """Retrieve all scheduled, completed, and cancelled interviews across applications."""
+    app_service.reload()
+    results = []
+    for app, iv in interview_service.get_all_interviews():
+        results.append({
+            "application_id": app.application_id,
+            "company_name": app.company_name,
+            "job_role": app.job_role,
+            "application_status": app.status.value,
+            **iv.to_dict(),
+        })
+    return results
+
+
+@app.post("/api/interviews", status_code=status.HTTP_201_CREATED, tags=["Interviews"])
+def schedule_interview(req: InterviewCreateRequest):
+    """Schedule a new interview round for an application. Auto-updates status to 'Interview'."""
+    try:
+        iv = interview_service.schedule_interview(
+            application_id=req.application_id,
+            round_name=req.round_name,
+            interview_date=req.interview_date,
+            interview_time=req.interview_time,
+            interview_mode=req.interview_mode or "Online / Video",
+            meeting_link=req.meeting_link,
+            prep_notes=req.prep_notes or "",
+        )
+        return {"success": True, "data": iv.to_dict()}
+    except RecordNotFoundError as re:
+        raise HTTPException(status_code=404, detail=str(re))
+    except ValidationError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to schedule interview: {e}")
+
+
+@app.put("/api/interviews/{app_id}/{interview_id}", tags=["Interviews"])
+def update_interview(app_id: str, interview_id: str, req: InterviewUpdateRequest):
+    """Update details of an interview round (date, time, meet link, notes)."""
+    try:
+        update_data = {k: v for k, v in req.model_dump().items() if v is not None}
+        iv = interview_service.update_interview(app_id, interview_id, **update_data)
+        return {"success": True, "data": iv.to_dict()}
+    except RecordNotFoundError as re:
+        raise HTTPException(status_code=404, detail=str(re))
+    except ValidationError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update interview: {e}")
+
+
+@app.post("/api/interviews/{app_id}/{interview_id}/outcome", tags=["Interviews"])
+def record_interview_outcome(app_id: str, interview_id: str, req: InterviewOutcomeRequest):
+    """Record Passed, Failed, or Pending outcome with feedback notes; marks round as Completed."""
+    try:
+        iv = interview_service.record_outcome(
+            application_id=app_id,
+            interview_id=interview_id,
+            outcome=req.outcome,
+            notes=req.notes or "",
+        )
+        return {"success": True, "data": iv.to_dict()}
+    except RecordNotFoundError as re:
+        raise HTTPException(status_code=404, detail=str(re))
+    except ValidationError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to record outcome: {e}")
+
+
+@app.post("/api/interviews/{app_id}/{interview_id}/cancel", tags=["Interviews"])
+def cancel_interview(app_id: str, interview_id: str, req: InterviewCancelRequest):
+    """Mark an interview as Cancelled with optional reason."""
+    try:
+        iv = interview_service.cancel_interview(
+            application_id=app_id,
+            interview_id=interview_id,
+            cancellation_reason=req.reason or "",
+        )
+        return {"success": True, "data": iv.to_dict()}
+    except RecordNotFoundError as re:
+        raise HTTPException(status_code=404, detail=str(re))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cancel interview: {e}")
+
+
+# ==============================================================================
+# 8. Reminders & Funnel Analytics Endpoints
+# ==============================================================================
+
+@app.get("/api/reminders", tags=["Reminders"])
+def get_reminders(days: Optional[int] = Query(None, ge=1, le=90, description="Lookahead window in days (1-90)")):
+    """Returns today's interviews, upcoming interviews, upcoming deadlines, and overdue deadlines."""
+    app_service.reload()
+    reminders = reminder_service.get_all_reminders_summary(days=days)
+
+    return {
+        "reference_date": reminders["reference_date"],
+        "window_days": reminders["window_days"],
+        "total_reminders": reminders["total_reminders"],
+        "interviews_today": [
+            {"application": app.to_dict(), "interview": iv.to_dict()}
+            for app, iv in reminders["interviews_today"]
+        ],
+        "upcoming_interviews": [
+            {"application": app.to_dict(), "interview": iv.to_dict()}
+            for app, iv in reminders["upcoming_interviews"]
+        ],
+        "upcoming_deadlines": [app.to_dict() for app in reminders["upcoming_deadlines"]],
+        "overdue_deadlines": [app.to_dict() for app in reminders["overdue_deadlines"]],
+    }
+
+
+@app.get("/api/analytics", tags=["Analytics"])
+def get_analytics():
+    """Returns funnel conversion rates, status counts, top companies, and role breakdowns."""
+    app_service.reload()
+    summary = analytics_service.calculate_summary()
+    return summary.to_dict()
+
+
+# ==============================================================================
+# 9. Spreadsheet-Safe CSV Export Endpoints
+# ==============================================================================
+
+@app.get("/api/export/{export_type}", tags=["Exports"])
+def export_csv(export_type: str, status_filter: Optional[str] = None):
+    """Export dataset to CSV with formula injection defense disarming '=', '+', '-', '@' triggers."""
+    app_service.reload()
+    try:
         clean_type = export_type.strip().lower()
-        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        output = io.StringIO()
-        writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
-
         if clean_type == "applications":
-            apps = self.load_applications()
-            if status_filter and status_filter.lower() != "all":
-                apps = [a for a in apps if a.get("status", "").lower() == status_filter.lower()]
-                filename = f"applications_{status_filter.lower()}_{ts}.csv"
+            apps = app_service.get_all_applications()
+            if status_filter:
+                csv_path = csv_exporter.export_applications_by_status(apps, status=status_filter)
             else:
-                filename = f"applications_export_{ts}.csv"
-
-            headers = [
-                "Application ID", "Company Name", "Job Role", "Location", "Job Type",
-                "Status", "Application Date", "Deadline", "Min Salary", "Max Salary",
-                "Job Posting URL", "Interviews Count", "Notes", "Created At", "Applicant Name"
-            ]
-            writer.writerow(headers)
-            for a in apps:
-                writer.writerow([
-                    sanitize(a.get("application_id")),
-                    sanitize(a.get("company_name")),
-                    sanitize(a.get("job_role")),
-                    sanitize(a.get("location")),
-                    sanitize(a.get("job_type")),
-                    sanitize(a.get("status")),
-                    sanitize(a.get("application_date")),
-                    sanitize(a.get("application_deadline") or "N/A"),
-                    sanitize(a.get("min_salary") or ""),
-                    sanitize(a.get("max_salary") or ""),
-                    sanitize(a.get("job_url") or ""),
-                    len(a.get("interviews", [])),
-                    sanitize(a.get("notes") or ""),
-                    sanitize(a.get("created_at")),
-                    sanitize(a.get("applicant_name") or "Naga Chiranjeevi")
-                ])
-
+                csv_path = csv_exporter.export_applications(apps)
         elif clean_type == "interviews":
-            filename = f"interviews_export_{ts}.csv"
-            headers = [
-                "Interview ID", "Application ID", "Company Name", "Job Role",
-                "Round Name", "Date", "Time", "Mode", "Status", "Outcome", "Meeting Link", "Notes"
-            ]
-            writer.writerow(headers)
-            ivs = self.get_all_interviews()
-            for iv in ivs:
-                writer.writerow([
-                    sanitize(iv.get("interview_id")),
-                    sanitize(iv.get("application_id")),
-                    sanitize(iv.get("company_name")),
-                    sanitize(iv.get("job_role")),
-                    sanitize(iv.get("round_name")),
-                    sanitize(iv.get("interview_date")),
-                    sanitize(iv.get("interview_time")),
-                    sanitize(iv.get("interview_mode")),
-                    sanitize(iv.get("interview_status")),
-                    sanitize(iv.get("outcome")),
-                    sanitize(iv.get("meeting_link")),
-                    sanitize(iv.get("prep_notes"))
-                ])
-
+            ivs = interview_service.get_all_interviews()
+            csv_path = csv_exporter.export_interviews(ivs)
         elif clean_type == "analytics":
-            filename = f"analytics_summary_{ts}.csv"
-            dash = self.get_dashboard()
-            kpis = dash.get("kpis", {})
-            writer.writerow(["Metric", "Value"])
-            writer.writerow(["Total Applications", kpis.get("total_applications", 0)])
-            writer.writerow(["Active Applications", kpis.get("active_applications", 0)])
-            writer.writerow(["Interviews Scheduled", kpis.get("interviews_scheduled", 0)])
-            writer.writerow(["Offers Received", kpis.get("offers_received", 0)])
-            writer.writerow(["Interview Conversion Rate (%)", f"{kpis.get('interview_conversion_rate', 0)}%"])
-            writer.writerow(["Offer Conversion Rate (%)", f"{kpis.get('offer_conversion_rate', 0)}%"])
-            writer.writerow([])
-            writer.writerow(["Pipeline Status", "Count"])
-            for st, cnt in dash.get("pipeline_by_status", {}).items():
-                writer.writerow([sanitize(st), cnt])
+            summary = analytics_service.calculate_summary()
+            csv_path = csv_exporter.export_analytics(summary)
         else:
-            filename = f"export_{ts}.csv"
-            writer.writerow(["Message", f"Export type '{clean_type}' generated."])
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown export type '{export_type}'. Choose 'applications', 'interviews', or 'analytics'."
+            )
 
-        csv_content = output.getvalue().encode("utf-8")
-        return csv_content, filename
-
-
-# ==============================================================================
-# HTTP Request Handler with Built-in API & Static Serving
-# ==============================================================================
-
-def run_builtin_server(port: int = 8000):
-    """Zero-dependency HTTP server with REST API and static frontend dispatcher."""
-    api_engine = BuiltinAPIEngine(DATA_DIR)
-
-    mimetypes.add_type("application/javascript", ".jsx")
-    mimetypes.add_type("text/javascript", ".jsx")
-    mimetypes.add_type("text/css", ".css")
-
-    class JobTrackHTTPHandler(http.server.SimpleHTTPRequestHandler):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, directory=str(FRONTEND_DIR), **kwargs)
-
-        def end_headers(self):
-            # Anti-caching headers: Ensures browser always evaluates current JSX & CSS
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "*")
-            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-            self.send_header("Pragma", "no-cache")
-            self.send_header("Expires", "0")
-            super().end_headers()
-
-        def do_OPTIONS(self):
-            self.send_response(200)
-            self.end_headers()
-
-        def _send_json(self, data, status: int = 200):
-            payload = json.dumps(data, indent=2).encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
-
-        def _parse_body(self) -> dict:
-            content_length = int(self.headers.get("Content-Length", 0))
-            if content_length > 0:
-                raw_body = self.rfile.read(content_length).decode("utf-8")
-                try:
-                    return json.loads(raw_body)
-                except Exception:
-                    return {}
-            return {}
-
-        def do_GET(self):
-            parsed = urllib.parse.urlparse(self.path)
-            clean_path = parsed.path
-            params = urllib.parse.parse_qs(parsed.query)
-
-            # ---------------- API Routing ----------------
-            if clean_path == "/api/health":
-                return self._send_json({"status": "healthy", "service": "JobTrack Pro", "mode": "builtin_engine", "version": "2.2.0"})
-
-            elif clean_path == "/api/meta":
-                return self._send_json(api_engine.get_meta())
-
-            elif clean_path == "/api/dashboard":
-                return self._send_json(api_engine.get_dashboard())
-
-            elif clean_path == "/api/applications":
-                search = params.get("search", [""])[0]
-                status = params.get("status", [""])[0]
-                job_type = params.get("job_type", [""])[0]
-                return self._send_json(api_engine.get_applications(search=search, status=status, job_type=job_type))
-
-            elif clean_path.startswith("/api/applications/"):
-                app_id = clean_path.split("/")[-1]
-                app_obj = api_engine.get_application_by_id(app_id)
-                if app_obj:
-                    return self._send_json(app_obj)
-                return self._send_json({"detail": "Application not found"}, status=404)
-
-            elif clean_path == "/api/interviews":
-                return self._send_json(api_engine.get_all_interviews())
-
-            elif clean_path == "/api/reminders":
-                window = int(params.get("window_days", [14])[0])
-                return self._send_json(api_engine.get_reminders(window_days=window))
-
-            elif clean_path == "/api/settings":
-                return self._send_json(api_engine.load_settings())
-
-            elif clean_path.startswith("/api/export/"):
-                export_type = clean_path.replace("/api/export/", "").split("?")[0].strip().lower()
-                status_filter = params.get("status_filter", [""])[0]
-                csv_bytes, filename = api_engine.generate_csv_export(export_type, status_filter=status_filter)
-                self.send_response(200)
-                self.send_header("Content-Type", "text/csv; charset=utf-8")
-                self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
-                self.send_header("Content-Length", str(len(csv_bytes)))
-                self.end_headers()
-                self.wfile.write(csv_bytes)
-                return
-
-            # ---------------- Frontend Routing ----------------
-            elif clean_path == "/" or clean_path == "/index.html":
-                self.path = "/index.html"
-            elif clean_path.startswith("/static/"):
-                self.path = clean_path.replace("/static/", "/", 1)
-
-            return super().do_GET()
-
-        def do_POST(self):
-            parsed = urllib.parse.urlparse(self.path)
-            clean_path = parsed.path
-            body = self._parse_body()
-
-            if clean_path == "/api/applications":
-                created = api_engine.create_application(body)
-                return self._send_json(created, status=201)
-
-            elif clean_path == "/api/interviews":
-                scheduled = api_engine.schedule_interview(body)
-                if scheduled:
-                    return self._send_json(scheduled, status=201)
-                return self._send_json({"detail": "Parent application not found"}, status=404)
-
-            elif "/outcome" in clean_path:
-                # /api/interviews/{appId}/{ivId}/outcome
-                parts = clean_path.strip("/").split("/")
-                if len(parts) >= 4:
-                    app_id, iv_id = parts[2], parts[3]
-                    updated = api_engine.record_outcome(app_id, iv_id, body)
-                    if updated:
-                        return self._send_json(updated)
-                return self._send_json({"detail": "Interview record not found"}, status=404)
-
-            elif "/cancel" in clean_path:
-                # /api/interviews/{appId}/{ivId}/cancel
-                parts = clean_path.strip("/").split("/")
-                if len(parts) >= 4:
-                    app_id, iv_id = parts[2], parts[3]
-                    cancelled = api_engine.cancel_interview(app_id, iv_id, body.get("reason", ""))
-                    if cancelled:
-                        return self._send_json(cancelled)
-                return self._send_json({"detail": "Interview record not found"}, status=404)
-
-            elif clean_path == "/api/seed":
-                return self._send_json({"message": "JobTrack demo data active", "count": len(api_engine.load_applications())})
-
-            return self._send_json({"detail": "Not found"}, status=404)
-
-        def do_PUT(self):
-            parsed = urllib.parse.urlparse(self.path)
-            clean_path = parsed.path
-            body = self._parse_body()
-
-            if clean_path.startswith("/api/applications/"):
-                app_id = clean_path.split("/")[-1]
-                updated = api_engine.update_application(app_id, body)
-                if updated:
-                    return self._send_json(updated)
-                return self._send_json({"detail": "Application not found"}, status=404)
-
-            elif clean_path == "/api/settings":
-                api_engine.save_settings(body)
-                return self._send_json(body)
-
-            return self._send_json({"detail": "Not found"}, status=404)
-
-        def do_DELETE(self):
-            parsed = urllib.parse.urlparse(self.path)
-            clean_path = parsed.path
-
-            if clean_path.startswith("/api/applications/"):
-                app_id = clean_path.split("/")[-1]
-                deleted = api_engine.delete_application(app_id)
-                if deleted:
-                    return self._send_json({"message": "Application deleted successfully"})
-                return self._send_json({"detail": "Application not found"}, status=404)
-
-            return self._send_json({"detail": "Not found"}, status=404)
-
-        def log_message(self, format, *args):
-            pass  # Keep console output clean
-
-    print("=" * 72)
-    print("  JobTrack Pro — Executive Aesthetic Dashboard & Zero-Install Engine")
-    print("  Access the app in your browser: http://localhost:8000")
-    print("  Persistent JSON data store   : JobTrack/JobTrack/data/applications.json")
-    print("=" * 72)
-
-    socketserver.TCPServer.allow_reuse_address = True
-    try:
-        with socketserver.TCPServer(("0.0.0.0", port), JobTrackHTTPHandler) as httpd:
-            print(f"  Server active on port {port}. Press Ctrl+C to terminate.\n")
-            httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\n  Server stopped.")
+        return FileResponse(
+            path=csv_path,
+            filename=csv_path.name,
+            media_type="text/csv",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate CSV export: {e}")
 
 
 # ==============================================================================
-# Entry Point
+# 10. System Preferences & Settings Endpoints
 # ==============================================================================
 
+@app.get("/api/settings", tags=["Settings"])
+def get_settings():
+    """Retrieve current user settings (reminder window, default status, date format)."""
+    return storage.load_settings()
+
+
+@app.post("/api/settings", tags=["Settings"])
+@app.put("/api/settings", tags=["Settings"])
+def update_settings(req: SettingsUpdateRequest):
+    """Update user preferences and persist atomically."""
+    settings = storage.load_settings()
+    if req.applicant_name is not None and req.applicant_name.strip():
+        settings["applicant_name"] = req.applicant_name.strip()
+    if req.theme_mode is not None and req.theme_mode.strip().lower() in ("light", "dark"):
+        settings["theme_mode"] = req.theme_mode.strip().lower()
+    if req.reminder_window_days is not None:
+        settings["reminder_window_days"] = req.reminder_window_days
+        reminder_service.default_window_days = req.reminder_window_days
+    if req.default_application_status is not None:
+        settings["default_application_status"] = req.default_application_status
+    if req.date_display_format is not None:
+        settings["date_display_format"] = req.date_display_format
+
+    storage.save_settings(settings)
+    return {"success": True, "settings": settings}
+
+
+# ==============================================================================
+# 11. Presentation Demo / Sample Data Seeder
+# ==============================================================================
+
+@app.post("/api/seed-sample-data", tags=["Demo"])
+@app.post("/api/seed", tags=["Demo"])
+def seed_sample_data():
+    """Populates realistic sample data (Google, Microsoft, Amazon, Stripe) for smooth project demos."""
+    sample_records = [
+        {
+            "company_name": "Google",
+            "job_role": "Full Stack Software Engineer",
+            "location": "Bengaluru, India (Hybrid)",
+            "job_type": "Full-time",
+            "job_description": "Building cloud-native web applications with Python, FastAPI, and React.",
+            "application_date": "2026-10-15",
+            "application_deadline": "2026-11-15",
+            "job_url": "https://careers.google.com/jobs/results/12345",
+            "min_salary": 120000.0,
+            "max_salary": 160000.0,
+            "status": "Interview",
+            "notes": "Referred by senior software engineer. Round 1 coding passed.",
+            "interviews": [
+                {
+                    "round_name": "Technical Assessment",
+                    "interview_date": "2026-10-22",
+                    "interview_time": "15:00",
+                    "interview_mode": "Online / Video",
+                    "meeting_link": "https://meet.google.com/abc-defg-hij",
+                    "prep_notes": "Focused on dynamic programming and graph algorithms.",
+                    "interview_status": "Completed",
+                    "outcome": "Passed",
+                },
+                {
+                    "round_name": "System Design",
+                    "interview_date": get_current_date().strftime("%Y-%m-%d"),
+                    "interview_time": "17:30",
+                    "interview_mode": "Online / Video",
+                    "meeting_link": "https://meet.google.com/xyz-uvwx-rst",
+                    "prep_notes": "Distributed caching, rate limiters, and microservice communication.",
+                    "interview_status": "Scheduled",
+                    "outcome": "Pending",
+                },
+            ],
+        },
+        {
+            "company_name": "Microsoft",
+            "job_role": "Backend Cloud Developer",
+            "location": "Hyderabad, India",
+            "job_type": "Full-time",
+            "job_description": "Azure cloud services, scalable REST APIs, and event-driven architectures.",
+            "application_date": "2026-10-10",
+            "application_deadline": "2026-10-30",
+            "job_url": "https://careers.microsoft.com/us/en/job/67890",
+            "min_salary": 110000.0,
+            "max_salary": 145000.0,
+            "status": "Offer Received",
+            "notes": "Official offer letter received! Base: $135k + stock options.",
+            "interviews": [
+                {
+                    "round_name": "Screening / HR",
+                    "interview_date": "2026-10-14",
+                    "interview_time": "11:00",
+                    "interview_mode": "Online / Video",
+                    "meeting_link": "https://teams.microsoft.com/l/meetup-join/123",
+                    "prep_notes": "HR background discussion and salary expectations.",
+                    "interview_status": "Completed",
+                    "outcome": "Passed",
+                },
+                {
+                    "round_name": "Final Round",
+                    "interview_date": "2026-10-25",
+                    "interview_time": "14:00",
+                    "interview_mode": "Online / Video",
+                    "meeting_link": "https://teams.microsoft.com/l/meetup-join/456",
+                    "prep_notes": "Engineering Director cultural and architectural fit.",
+                    "interview_status": "Completed",
+                    "outcome": "Passed",
+                },
+            ],
+        },
+        {
+            "company_name": "Amazon",
+            "job_role": "Frontend React Engineer",
+            "location": "Remote",
+            "job_type": "Full-time",
+            "job_description": "Crafting responsive, accessible user interfaces with React, Tailwind CSS, and TypeScript.",
+            "application_date": "2026-10-20",
+            "application_deadline": "2026-11-20",
+            "job_url": "https://amazon.jobs/en/jobs/998877",
+            "min_salary": 95000.0,
+            "max_salary": 130000.0,
+            "status": "Assessment",
+            "notes": "HackerRank OA link received. 90 minutes test.",
+            "interviews": [],
+        },
+        {
+            "company_name": "Stripe",
+            "job_role": "API Platform Engineer",
+            "location": "Remote",
+            "job_type": "Full-time",
+            "job_description": "Designing high-reliability payment processing pipelines and developer APIs.",
+            "application_date": "2026-10-18",
+            "application_deadline": "2026-11-10",
+            "job_url": "https://stripe.com/jobs/api-eng",
+            "min_salary": 130000.0,
+            "max_salary": 175000.0,
+            "status": "Applied",
+            "notes": "Applied via company portal after recruiter reach-out on LinkedIn.",
+            "interviews": [],
+        },
+        {
+            "company_name": "Codegnan",
+            "job_role": "Python Full-Stack Instructor & Developer",
+            "location": "Hyderabad, India",
+            "job_type": "Full-time",
+            "job_description": "Developing modern web apps with FastAPI, React, and mentoring students.",
+            "application_date": "2026-10-01",
+            "application_deadline": "2026-10-20",
+            "job_url": "https://codegnan.com/careers",
+            "min_salary": 50000.0,
+            "max_salary": 80000.0,
+            "status": "Selected",
+            "notes": "Offer accepted! Excited to mentor budding engineers.",
+            "interviews": [
+                {
+                    "round_name": "Technical Assessment",
+                    "interview_date": "2026-10-05",
+                    "interview_time": "10:00",
+                    "interview_mode": "In-person",
+                    "meeting_link": None,
+                    "prep_notes": "Live coding demonstration in Python & JavaScript.",
+                    "interview_status": "Completed",
+                    "outcome": "Passed",
+                }
+            ],
+        },
+    ]
+
+    created = []
+    for item in sample_records:
+        interviews_to_add = item.pop("interviews", [])
+        app = app_service.add_application(**item)
+        for iv_data in interviews_to_add:
+            interview_service.schedule_interview(
+                application_id=app.application_id,
+                round_name=iv_data["round_name"],
+                interview_date=iv_data["interview_date"],
+                interview_time=iv_data["interview_time"],
+                interview_mode=iv_data.get("interview_mode", "Online / Video"),
+                meeting_link=iv_data.get("meeting_link"),
+                prep_notes=iv_data.get("prep_notes", ""),
+            )
+            if iv_data.get("interview_status") == "Completed":
+                iv_obj = app.interviews[-1]
+                interview_service.record_outcome(
+                    application_id=app.application_id,
+                    interview_id=iv_obj.interview_id,
+                    outcome=iv_data.get("outcome", "Passed"),
+                    notes="Completed during sample seed.",
+                )
+        created.append(app.company_name)
+
+    return {"success": True, "message": f"Successfully seeded {len(created)} applications: {', '.join(created)}"}
+
+
+# ==============================================================================
+# 12. Static Assets & Single Page Application (SPA) Serving
+# ==============================================================================
+
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+if FRONTEND_DIR.exists():
+    # Mount the frontend directory to serve CSS, JSX, and scripts
+    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+
+    @app.get("/", include_in_schema=False)
+    def serve_frontend_index():
+        """Serves the interactive single-page dashboard at http://localhost:8000/"""
+        return FileResponse(FRONTEND_DIR / "index.html")
+
+
+# Standalone runner for `python server.py`
 if __name__ == "__main__":
-    # Check if FastAPI is present
-    has_fastapi = False
-    app = None
-    try:
-        import fastapi
-        import uvicorn
-        spec = importlib.util.spec_from_file_location("jobtrack_backend_server", PROJECT_DIR / "server.py")
-        server_module = importlib.util.module_from_spec(spec)
-        sys.modules["jobtrack_backend_server"] = server_module
-        spec.loader.exec_module(server_module)
-        app = getattr(server_module, "app", None)
-        has_fastapi = (app is not None)
-    except Exception:
-        has_fastapi = False
+    import uvicorn
 
-    if has_fastapi and app is not None:
-        import uvicorn
-        print("=" * 72)
-        print("  JobTrack Pro — FastAPI Mode Running")
-        print("  Open in browser: http://localhost:8000")
-        print("=" * 72)
-        uvicorn.run(app, host="0.0.0.0", port=8000)
-    else:
-        run_builtin_server(port=8000)
+    print("=" * 72)
+    print("  JobTrack Pro — Web Dashboard & FastAPI Backend Starting")
+    print("  Dashboard UI        : http://localhost:8000")
+    print("  Interactive API Docs: http://localhost:8000/docs")
+    print("=" * 72)
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
