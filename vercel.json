@@ -1,14 +1,4 @@
 {
   "version": 2,
-  "outputDirectory": "frontend",
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/[[...path]].py"
-    },
-    {
-      "source": "/static/(.*)",
-      "destination": "/$1"
-    }
-  ]
+  "outputDirectory": "frontend"
 }
