@@ -842,49 +842,35 @@ def seed_sample_data():
 # 12. Static Assets & Single Page Application (SPA) Serving
 # ==============================================================================
 
-# Search candidates for index.html and static assets (supports local execution and Vercel serverless)
-STATIC_CANDIDATES = [
-    PROJECT_ROOT / "public",
-    PROJECT_ROOT / "frontend",
-    PROJECT_ROOT,
-    PROJECT_ROOT.parent / "public",
-    PROJECT_ROOT.parent / "frontend",
-    PROJECT_ROOT.parent,
-]
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+if not FRONTEND_DIR.exists() and (PROJECT_ROOT.parent / "frontend").exists():
+    FRONTEND_DIR = PROJECT_ROOT.parent / "frontend"
 
-FRONTEND_DIR = None
-for c in STATIC_CANDIDATES:
-    if c.exists() and (c / "index.html").exists():
-        FRONTEND_DIR = c
-        break
-
-if FRONTEND_DIR:
+if FRONTEND_DIR.exists():
+    # Mount the frontend directory to serve CSS, JSX, and scripts
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 @app.get("/", include_in_schema=False)
 @app.get("/index.html", include_in_schema=False)
 def serve_frontend_index():
     """Serves the interactive single-page dashboard at http://localhost:8000/ or Vercel root."""
-    for c in STATIC_CANDIDATES:
-        idx = c / "index.html"
-        if idx.exists():
-            return FileResponse(idx)
-    return FileResponse(PROJECT_ROOT / "index.html")
+    index_file = FRONTEND_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    return HTMLResponse("<h1>JobTrack Pro Dashboard</h1>")
 
 @app.get("/styles.css", include_in_schema=False)
 def serve_styles():
-    for c in STATIC_CANDIDATES:
-        f = c / "styles.css"
-        if f.exists():
-            return FileResponse(f, media_type="text/css")
+    css_file = FRONTEND_DIR / "styles.css"
+    if css_file.exists():
+        return FileResponse(css_file, media_type="text/css")
     raise HTTPException(status_code=404)
 
 @app.get("/app.jsx", include_in_schema=False)
 def serve_app_jsx():
-    for c in STATIC_CANDIDATES:
-        f = c / "app.jsx"
-        if f.exists():
-            return FileResponse(f, media_type="application/javascript")
+    jsx_file = FRONTEND_DIR / "app.jsx"
+    if jsx_file.exists():
+        return FileResponse(jsx_file, media_type="application/javascript")
     raise HTTPException(status_code=404)
 
 
