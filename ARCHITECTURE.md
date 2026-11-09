@@ -123,25 +123,30 @@ flowchart TD
 
 ```text
 JobTrack/
-├── server.py              # Root launcher for Web Dashboard & REST API
 ├── main.py                # Root launcher for Terminal CLI
+├── server.py              # Root launcher for Web Dashboard & REST API
 ├── requirements.txt       # Project dependencies
 ├── README.md              # Getting started guide
 ├── ARCHITECTURE.md        # Architectural reference & responsive design specs
-└── JobTrack/
-    └── JobTrack/
-        ├── frontend/      # Web Dashboard assets
-        │   ├── index.html # HTML5 shell with dark-mode script
-        │   ├── app.jsx    # Responsive React 18 application
-        │   └── styles.css # Tailwind & glassmorphism utilities
-        ├── src/           # Domain business logic & models
-        │   ├── models/    # Domain data models & enums
-        │   ├── reports/   # CSV exporter
-        │   ├── services/  # Application, Interview, Reminder, & Analytics services
-        │   ├── storage/   # Atomic JSON storage engine
-        │   └── utils/     # Date math and input validators
-        ├── data/          # Persistent data storage (JSON files)
-        ├── exports/       # Generated CSV export files
-        └── tests/         # Exhaustive unit & integration test suites
+├── vercel.json            # Vercel deployment configuration
+├── api/                   # Serverless ASGI entrypoints
+│   ├── [[...path]].py     # Dynamic catch-all API handler
+│   └── index.py           # Base API handler
+├── frontend/              # Web Dashboard assets (single source of truth)
+│   ├── app.jsx            # Responsive React 18 full-screen SaaS application
+│   ├── index.html         # HTML5 shell with dark-mode script
+│   └── styles.css         # Tailwind & glassmorphism utilities
+├── src/                   # Domain business logic & models
+│   ├── models/            # Domain data models & enums
+│   ├── reports/           # CSV exporter
+│   ├── services/          # Application, Interview, Reminder, & Analytics services
+│   ├── storage/           # Atomic JSON storage engine
+│   └── utils/             # Date math and input validators
+├── data/                  # Persistent data storage (JSON files)
+│   ├── applications.json  # Job application records
+│   └── settings.json      # User preferences
+├── docs/                  # User guide & documentation
+└── exports/               # Generated CSV export files
+    └── .gitkeep
 ```
 

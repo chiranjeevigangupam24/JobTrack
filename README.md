@@ -57,7 +57,7 @@ Job seekers frequently encounter:
   * `collections.Counter` — High-efficiency categorical distribution aggregation.
   * `typing` & `dataclasses` — Type safety, code readability, and strict domain modeling.
   * `enum` — Centralized status, job type, and interview stage definitions.
-  * `unittest` & `tempfile` — Deterministic automated unit testing with isolated sandboxes.
+  * `tempfile` — Atomic file operations and safe persistence sandboxing.
 
 ---
 
@@ -118,13 +118,6 @@ JobTrack/
 │       ├── validators.py       # Input sanitation & rule enforcement
 │       ├── date_utils.py       # Date arithmetic & ISO 8601 formatting
 │       └── display.py          # Terminal tables, ASCII cards, & prompts
-│
-├── tests/
-│   ├── __init__.py
-│   ├── test_application.py         # Model & validation tests
-│   ├── test_application_service.py # Service layer & workflow tests
-│   ├── test_json_storage.py         # Storage & corruption recovery tests
-│   └── test_analytics_service.py    # Analytics & reminder boundary tests
 │
 └── exports/
     └── .gitkeep                # Output folder for generated CSV reports
@@ -234,25 +227,7 @@ python main.py
 
 ---
 
-## 10. Running the Test Suite
-
-JobTrack includes 24 comprehensive unit tests verifying data validation, CRUD workflows, JSON persistence integrity, corruption resilience, and reminder date boundary math.
-
-Run tests using Python's standard test runner:
-
-```powershell
-python -m unittest discover -s tests -v
-```
-
-### Verified Test Categories:
-* **`test_application.py`**: Required field checks, ISO date validation, negative salary rejections, URL formats, status enums, and dict serialization round-trip.
-* **`test_application_service.py`**: Application creation, retrieval, updates, deletions, case-insensitive multi-field search, multi-criteria filtering, and interview workflow triggers.
-* **`test_json_storage.py`**: Safe atomic saving, handling missing files, recovering from malformed JSON without erasing data, and skipping invalid entries.
-* **`test_analytics_service.py`**: Metric formulas, division-by-zero protection on empty datasets, reminder boundary math with reference date injection, and spreadsheet formula injection sanitization (`=`, `+`, `-`, `@`).
-
----
-
-## 11. Security & Data Integrity
+## 10. Security & Data Integrity
 
 1. **Spreadsheet Formula Injection Defense (CSV Injection):**
    When exporting to CSV, any text cell beginning with characters such as `=`, `+`, `-`, `@`, `\t`, or `\r` is automatically escaped with a leading single quote (`'`). The underlying stored application record is **never mutated**.
